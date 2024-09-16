@@ -11,3 +11,5 @@
 
 
 mod hmm_tools;
+mod state;
+mod transition_matrix;
