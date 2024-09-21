@@ -12,4 +12,5 @@
 
 mod hmm_tools;
 mod state;
-mod transition_matrix;
+mod probability_matrices;
+mod viterbi;

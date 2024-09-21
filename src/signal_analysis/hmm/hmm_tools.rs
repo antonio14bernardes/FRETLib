@@ -1,167 +1,380 @@
-// use std::ops::{Index, IndexMut};
-
-// pub struct State {
-//     pub id: usize,
-//     pub value: f64,
-//     pub noise_std: f64,
-//     pub name: Option<String>,
-// }
-
-// impl State {
-//     // Constructor to create a new State.
-//     // Name is always set to None when isntantiating
-//     // Use method set_name to give the state a cool name
-//     pub fn new(id: usize, value: f64, noise_std: f64) -> Self {
-//         State {
-//             id,
-//             value,
-//             noise_std,
-//             name: None,
-//         }
-//     }
-
-//     // Method to baptize the state with a legit name
-//     pub fn set_name(&mut self, name: String) {
-//         self.name = Some(name);
-//     }
-
-//     // Method to calculate the  emission probability based on an observed FRET value using
-//     // the standard Gaussian
-//     pub fn standard_gaussian_emission_probability(&self, observed_fret: f64) -> f64 {
-//         let variance = self.noise_std * self.noise_std;
-//         let exponent = -(observed_fret - self.value).powi(2) / (2.0 * variance);
-//         (1.0 / (self.noise_std * (2.0 * std::f64::consts::PI).sqrt())) * exponent.exp()
-//     }
-
-//     // Method to calculate the  emission probability based on an observed FRET value using
-//     // the simplified Gaussian discussed in the paper (see hmm module root file)
-//     pub fn paper_gaussian_emission_probability(&self, observed_fret: f64) -> f64 {
-//         let scaled_diff = (observed_fret - self.value) / self.noise_std;
-//         (-2.0 * scaled_diff.powi(2)).exp()
-//     }
-// }
-
-// pub trait IDTarget {
-//     fn get_id(&self) -> usize;
-// }
-
-// impl IDTarget for usize {
-//     fn get_id(&self) -> usize {
-//         *self  // Simply return the value of usize
-//     }
-// }
-
-// impl IDTarget for State {
-//     fn get_id(&self) -> usize {
-//         self.id  // Return the ID field from the State struct
-//     }
-// }
+use std::ops::{Index, IndexMut};
+use super::state::*;
 
 
-// pub struct TransitionMatrix {
-//     matrix: Vec<Vec<f64>>,
-// }
 
-// impl TransitionMatrix {
-//     // Create a new transition matrix from full matrix input
-//     pub fn new(matrix: Vec<Vec<f64>>) -> Self {
-//         Self { matrix }
-//     }
+/*
+Some matrix like structs.
+If these end up not needing any specific intrinsic validation, they 
+can be replaced by Vecs if they implement Index<(&State)> etc.
+*/
+#[derive(Debug, Clone)]
+pub struct StateMatrix1D<T> {
+    pub raw_matrix: Vec<T>,
+}
 
-//     // Create an empty transition matrix
-//     pub fn empty(size: usize) -> Self {
-//         Self {
-//             matrix: vec![vec![0.0; size]; size],
-//         }
-//     }
+impl<T> StateMatrix1D<T> {
+    // Create new from a full matrix input
+    pub fn new(raw_matrix: Vec<T>) -> Self {
+        Self { raw_matrix }
+    }
 
-//     // Get probability for a given transition
-//     pub fn get<T: IDTarget>(&self, from: T, to: T) -> f64 {
-//         self.matrix[from.get_id()][to.get_id()]
-//     }
+    // Create an empty matrix
+    pub fn empty(size: usize) -> Self
+    where
+        T: Default + Clone,
+    {
+        Self {
+            raw_matrix: vec![T::default(); size],
+        }
+    }
 
-//     // Set the probability of transitioning from one state to another
-//     pub fn set<T: IDTarget>(&mut self, from_state: T, to_state: T, prob: f64) {
-//         self.matrix[from_state.get_id()][to_state.get_id()] = prob;
-//     }
+    // Obtain secret knowledge from this magical matrix
+    pub fn get(&self, index: usize) -> &T {
+        &self.raw_matrix[index]
+    }
 
-//     // Check if the matrix is valid
-//     pub fn validate(&self) -> Result<(), MatrixValidationError> {
-//         let mut empty_rows = Vec::<usize>::new();
-//         let mut incorrect_rows_id = Vec::<usize>::new();
-//         let mut incorrect_rows_values = Vec::<Vec<f64>>::new();
-    
-//         for (i, row) in self.matrix.iter().enumerate() {
-//             // Check if row is empty
-//             let sum: f64 = row.iter().sum();
-    
-//             if sum == 0.0 {
-//                 empty_rows.push(i);
-//             } else if (sum - 1.0).abs() > 1e-4 {
-//                 incorrect_rows_id.push(i);
-//                 incorrect_rows_values.push(row.clone());
-//             }
-//         }
-    
-//         // Entire matrix is empty
-//         if empty_rows.len() == self.matrix.len() {
-//             return Err(MatrixValidationError::MatrixEmpty);
-//         }
-//         // Some rows are empty
-//         else if !empty_rows.is_empty() {
-//             return Err(MatrixValidationError::RowsEmpty { rows: empty_rows });
-//         }
-//         // Some rows have incorrect values
-//         else if !incorrect_rows_id.is_empty() {
-//             return Err(MatrixValidationError::RowsIncorrectValues {
-//                 rows: incorrect_rows_id,
-//                 values: incorrect_rows_values,
-//             });
-//         }
-    
-//         // Matrix is valid
-//         Ok(())
-//     }
-// }
+    // Sneak a value into it
+    pub fn set(&mut self, index: usize, value: T) {
+        self.raw_matrix[index] = value;
+    }
 
-// // Define custom error for matrix value validation
-// pub enum MatrixValidationError {
-//     RowsIncorrectValues { rows: Vec<usize>, values: Vec<Vec<f64>> },   // Rows are incorrect, doesn't sum to 1
-//     MatrixEmpty,                                                 // Entire matrix sums to 0
-//     RowsEmpty { rows: Vec<usize> },                                     // Rows are empty 
-// }
+    // Get ref to full matrix
+    pub fn get_matrix(&self) -> &Vec<T> {
+        &self.raw_matrix
+    }
 
-// // Implement Index trait for read-only access
-// impl Index<(usize, usize)> for TransitionMatrix {
-//     type Output = f64;
+    // Get mut ref to full matrix
+    pub fn get_mut_matrix(&mut self) -> &mut Vec<T> {
+        &mut self.raw_matrix
+    }
 
-//     fn index(&self, index: (usize, usize)) -> &Self::Output {
-//         let (from, to) = index;
-//         &self.matrix[from][to]
-//     }
-// }
+    // Get len
+    pub fn len(&self) -> usize {
+        self.raw_matrix.len()
+    }
 
-// impl Index<(&State, &State)> for TransitionMatrix {
-//     type Output = f64;
+    // Get as iterator
+    pub fn iter(&self) -> std::slice::Iter<'_, T> {
+        self.raw_matrix.iter()
+    }
+}
 
-//     fn index(&self, index: (&State, &State)) -> &Self::Output {
-//         let (from, to) = (index.0.id, index.1.id);
-//         &self.matrix[from][to]
-//     }
-// }
+#[derive(Debug, Clone)]
+pub struct StateMatrix2D<T> {
+    pub raw_matrix: Vec<Vec<T>>,
+}
 
-// // Implement IndexMut trait for mutable access
-// impl IndexMut<(usize, usize)> for TransitionMatrix {
-//     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
-//         let (from, to) = index;
-//         &mut self.matrix[from][to]
-//     }
-// }
+impl<T> StateMatrix2D<T> {
+    // Create new from a full matrix input
+    pub fn new(raw_matrix: Vec<Vec<T>>) -> Self {
+        Self { raw_matrix }
+    }
 
-// impl IndexMut<(&State, &State)> for TransitionMatrix {
-//     fn index_mut(&mut self, index: (&State, &State)) -> &mut Self::Output {
-//         let (from, to) = (index.0.id, index.1.id);
-//         &mut self.matrix[from][to]
-//     }
-// }
+    // Create an empty matrix
+    pub fn empty(size: (usize, usize)) -> Self
+    where
+        T: Default + Clone,
+    {
+        Self {
+            raw_matrix: vec![vec![T::default(); size.1]; size.0],
+        }
+    }
 
+    // Obtain secret knowledge from this magical matrix
+    pub fn get(&self, index: (usize, usize)) -> &T {
+        &self.raw_matrix[index.0][index.1]
+    }
+
+    // Sneak a value into it
+    pub fn set(&mut self, index: (usize, usize), value: T) {
+        self.raw_matrix[index.0][index.1] = value;
+    }
+
+    // Get ref to full matrix
+    pub fn get_matrix(&self) -> &Vec<Vec<T>> {
+        &self.raw_matrix
+    }
+
+    // Get mut ref to full matrix
+    pub fn get_mut_matrix(&mut self) -> &mut Vec<Vec<T>> {
+        &mut self.raw_matrix
+    }
+
+    // Get len
+    pub fn len(&self) -> usize {
+        self.raw_matrix.len()
+    }
+
+    // Get shape
+    pub fn shape(&self) -> (usize, usize) {
+        let rows = self.raw_matrix.len();
+        let cols = if rows > 0 { self.raw_matrix[0].len() } else { 0 };
+        (rows, cols)
+    }
+
+    // Get as iterator
+    pub fn iter(&self) -> std::slice::Iter<'_, Vec<T>> {
+        self.raw_matrix.iter()
+    }
+}
+
+// Implement Index trait for not mut
+impl<T> Index<usize> for StateMatrix1D<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.raw_matrix[index]
+    }
+}
+
+impl<T> Index<&State> for StateMatrix1D<T> {
+    type Output = T;
+
+    fn index(&self, state: &State) -> &Self::Output {
+        &self.raw_matrix[state.get_id()]
+    }
+}
+
+impl<T> Index<(usize, usize)> for StateMatrix2D<T> {
+    type Output = T;
+
+    fn index(&self, index: (usize, usize)) -> &Self::Output {
+        &self.raw_matrix[index.0][index.1]
+    }
+}
+
+impl<T> Index<(&State, &State)> for StateMatrix2D<T> {
+    type Output = T;
+
+    fn index(&self, states: (&State, &State)) -> &Self::Output {
+        &self.raw_matrix[states.0.get_id()][states.1.get_id()]
+    }
+}
+
+impl<T> Index<usize> for StateMatrix2D<T> {
+    type Output = Vec<T>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.raw_matrix[index]
+    }
+}
+
+impl<T> Index<&State> for StateMatrix2D<T> {
+    type Output = Vec<T>;
+
+    fn index(&self, state: &State) -> &Self::Output {
+        &self.raw_matrix[state.get_id()]
+    }
+}
+
+
+// Implement IndexMut trait for mut
+impl<T> IndexMut<usize> for StateMatrix1D<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.raw_matrix[index]
+    }
+}
+
+impl<T> IndexMut<&State> for StateMatrix1D<T> {
+    fn index_mut(&mut self, state: &State) -> &mut Self::Output {
+        &mut self.raw_matrix[state.get_id()]
+    }
+}
+
+impl<T> IndexMut<(usize, usize)> for StateMatrix2D<T> {
+
+    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
+        &mut self.raw_matrix[index.0][index.1]
+    }
+}
+
+impl<T> IndexMut<(&State, &State)> for StateMatrix2D<T> {
+
+    fn index_mut(&mut self, states: (&State, &State)) -> &mut Self::Output {
+        &mut self.raw_matrix[states.0.get_id()][states.1.get_id()]
+    }
+}
+
+impl<T> IndexMut<usize> for StateMatrix2D<T> {
+
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.raw_matrix[index]
+    }
+}
+
+impl<T> IndexMut<&State> for StateMatrix2D<T> {
+
+    fn index_mut(&mut self, state: &State) -> &mut Self::Output {
+        &mut self.raw_matrix[state.get_id()]
+    }
+}
+
+
+#[cfg(test)]
+mod tests_state_matrix_1d {
+    use super::*;
+
+    #[test]
+    fn test_state_matrix_1d_new() {
+        let matrix = vec![1, 2, 3];
+        let state_matrix = StateMatrix1D::new(matrix.clone());
+        assert_eq!(state_matrix.raw_matrix, matrix);
+    }
+
+    #[test]
+    fn test_state_matrix_1d_empty() {
+        let state_matrix: StateMatrix1D<i32> = StateMatrix1D::empty(3);
+        assert_eq!(state_matrix.raw_matrix.len(), 3);
+        assert!(state_matrix.raw_matrix.iter().all(|&val| val == 0));
+    }
+
+    #[test]
+    fn test_state_matrix_1d_get_set_usize() {
+        let mut state_matrix = StateMatrix1D::empty(3);
+        state_matrix.set(0, 42);
+        assert_eq!(state_matrix.get(0), &42);
+    }
+
+    #[test]
+    fn test_state_matrix_1d_get_set_state() {
+        let mut state_matrix = StateMatrix1D::empty(3);
+        let state = State::new(1, 0.5, 0.1);
+        state_matrix.set(1, 99);
+        assert_eq!(state_matrix.get(state.get_id()), &99);
+    }
+
+    #[test]
+    fn test_state_matrix_1d_index_usize() {
+        let mut state_matrix = StateMatrix1D::empty(3);
+        state_matrix[0] = 100;
+        assert_eq!(state_matrix[0], 100);
+    }
+
+    #[test]
+    fn test_state_matrix_1d_index_state() {
+        let mut state_matrix = StateMatrix1D::empty(3);
+        let state = State::new(2, 0.5, 0.1);
+        state_matrix[&state] = 200;
+        assert_eq!(state_matrix[&state], 200);
+    }
+
+    #[test]
+    fn test_state_matrix_1d_len() {
+        let state_matrix: StateMatrix1D<i32> = StateMatrix1D::empty(5);
+        assert_eq!(state_matrix.len(), 5);
+    }
+
+    #[test]
+    fn test_state_matrix_1d_iter() {
+        let state_matrix = StateMatrix1D::new(vec![10, 20, 30]);
+        let mut iter = state_matrix.iter();
+        assert_eq!(iter.next(), Some(&10));
+        assert_eq!(iter.next(), Some(&20));
+        assert_eq!(iter.next(), Some(&30));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_state_matrix_1d_get_matrix() {
+        let matrix = vec![1, 2, 3];
+        let state_matrix = StateMatrix1D::new(matrix.clone());
+        assert_eq!(state_matrix.get_matrix(), &matrix);
+    }
+
+    #[test]
+    fn test_state_matrix_1d_get_mut_matrix() {
+        let matrix = vec![1, 2, 3];
+        let mut state_matrix = StateMatrix1D::new(matrix.clone());
+        state_matrix.get_mut_matrix()[0] = 99;
+        assert_eq!(state_matrix.get_matrix()[0], 99);
+    }
+}
+
+#[cfg(test)]
+mod tests_state_matrix_2d {
+    use super::*;
+
+    #[test]
+    fn test_state_matrix_2d_new() {
+        let matrix = vec![vec![1, 2], vec![3, 4]];
+        let state_matrix = StateMatrix2D::new(matrix.clone());
+        assert_eq!(state_matrix.raw_matrix, matrix);
+    }
+
+    #[test]
+    fn test_state_matrix_2d_empty() {
+        let state_matrix: StateMatrix2D<i32> = StateMatrix2D::empty((2, 2));
+        assert_eq!(state_matrix.raw_matrix.len(), 2);
+        assert_eq!(state_matrix.raw_matrix[0].len(), 2);
+        assert!(state_matrix.raw_matrix.iter().all(|row| row.iter().all(|&val| val == 0)));
+    }
+
+    #[test]
+    fn test_state_matrix_2d_get_set_usize() {
+        let mut state_matrix = StateMatrix2D::empty((2, 2));
+        state_matrix.set((0, 1), 42);
+        assert_eq!(state_matrix.get((0, 1)), &42);
+    }
+
+    #[test]
+    fn test_state_matrix_2d_get_set_states() {
+        let mut state_matrix = StateMatrix2D::empty((3, 3));
+        let state1 = State::new(1, 0.5, 0.1);
+        let state2 = State::new(2, 0.7, 0.2);
+        state_matrix.set((state1.id, state2.id), 99);
+        assert_eq!(state_matrix.get((state1.id, state2.id)), &99);
+    }
+
+    #[test]
+    fn test_state_matrix_2d_index_usize() {
+        let mut state_matrix = StateMatrix2D::empty((2, 2));
+        state_matrix[(0, 1)] = 100;
+        assert_eq!(state_matrix[(0, 1)], 100);
+    }
+
+    #[test]
+    fn test_state_matrix_2d_index_states() {
+        let mut state_matrix = StateMatrix2D::empty((3, 3));
+        let state1 = State::new(1, 0.5, 0.1);
+        let state2 = State::new(2, 0.7, 0.2);
+        state_matrix[(&state1, &state2)] = 200;
+        assert_eq!(state_matrix[(&state1, &state2)], 200);
+    }
+
+    #[test]
+    fn test_state_matrix_2d_len() {
+        let state_matrix: StateMatrix2D<i32> = StateMatrix2D::empty((3, 3));
+        assert_eq!(state_matrix.len(), 3);
+    }
+
+    #[test]
+    fn test_state_matrix_2d_shape() {
+        let state_matrix: StateMatrix2D<i32> = StateMatrix2D::empty((3, 4));
+        assert_eq!(state_matrix.shape(), (3, 4));
+    }
+
+    #[test]
+    fn test_state_matrix_2d_iter() {
+        let state_matrix = StateMatrix2D::new(vec![vec![10, 20], vec![30, 40]]);
+        let mut iter = state_matrix.iter();
+        assert_eq!(iter.next(), Some(&vec![10, 20]));
+        assert_eq!(iter.next(), Some(&vec![30, 40]));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_state_matrix_2d_get_matrix() {
+        let matrix = vec![vec![1, 2], vec![3, 4]];
+        let state_matrix = StateMatrix2D::new(matrix.clone());
+        assert_eq!(state_matrix.get_matrix(), &matrix);
+    }
+
+    #[test]
+    fn test_state_matrix_2d_get_mut_matrix() {
+        let matrix = vec![vec![1, 2], vec![3, 4]];
+        let mut state_matrix = StateMatrix2D::new(matrix.clone());
+        state_matrix.get_mut_matrix()[0][0] = 99;
+        assert_eq!(state_matrix.get_matrix()[0][0], 99);
+    }
+}
