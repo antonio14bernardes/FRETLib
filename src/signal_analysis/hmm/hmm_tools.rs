@@ -4,9 +4,9 @@ use super::state::*;
 
 
 /*
-Some matrix like structs.
+Structs for State related Matrices.
 If these end up not needing any specific intrinsic validation, they 
-can be replaced by Vecs if they implement Index<(&State)> etc.
+can be replaced by Vecs with implemented Index<(&State)> etc.
 */
 #[derive(Debug, Clone)]
 pub struct StateMatrix1D<T> {
@@ -152,6 +152,14 @@ impl<T> Index<(&State, &State)> for StateMatrix2D<T> {
     }
 }
 
+impl<T> Index<(&State, usize)> for StateMatrix2D<T> {
+    type Output = T;
+
+    fn index(&self, index: (&State, usize)) -> &Self::Output {
+        &self.raw_matrix[index.0.get_id()][index.1]
+    }
+}
+
 impl<T> Index<usize> for StateMatrix2D<T> {
     type Output = Vec<T>;
 
@@ -193,6 +201,13 @@ impl<T> IndexMut<(&State, &State)> for StateMatrix2D<T> {
 
     fn index_mut(&mut self, states: (&State, &State)) -> &mut Self::Output {
         &mut self.raw_matrix[states.0.get_id()][states.1.get_id()]
+    }
+}
+
+impl<T> IndexMut<(&State, usize)> for StateMatrix2D<T> {
+
+    fn index_mut(&mut self, index: (&State, usize)) -> &mut Self::Output {
+        &mut self.raw_matrix[index.0.get_id()][index.1]
     }
 }
 
