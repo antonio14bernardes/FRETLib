@@ -1,3 +1,5 @@
+use rand::Rng;
+
 use super::state::*;
 use super::hmm_tools::*;
 use std::ops::{Index, IndexMut};
@@ -36,6 +38,30 @@ impl TransitionMatrix {
     pub fn from_state_matrix(matrix: StateMatrix2D<f64>) -> Self {
         Self {
             matrix,
+        }
+    }
+
+    // Generate a random transition matrix
+    pub fn new_random(num_states: usize) -> Self {
+        let mut rng = rand::thread_rng();
+        let mut matrix: Vec<Vec<f64>> = Vec::with_capacity(num_states);
+
+        for _ in 0..num_states {
+            let mut row: Vec<f64> = Vec::with_capacity(num_states);
+            let mut total: f64 = 1.0;
+
+            for _ in 0..(num_states - 1) {
+                let val = rng.gen_range(0.0..total);
+                row.push(val);
+                total -= val;
+            }
+            
+            row.push(total);
+            matrix.push(row);
+        }
+
+        Self {
+            matrix: StateMatrix2D::new(matrix)
         }
     }
 
@@ -154,6 +180,25 @@ impl StartMatrix {
     // Create a new start matrix from full matrix input
     pub fn new(matrix: Vec<f64>) -> Self {
         Self { matrix }
+    }
+
+    // Create a new random start matrix
+    pub fn new_random(num_states: usize) -> Self {
+
+        let mut rng = rand::thread_rng();
+        let mut raw_matrix = Vec::with_capacity(num_states);
+
+        let mut total = 1.0;
+
+        for _ in 0..(num_states - 1) {
+            let val = rng.gen_range(0.0..total);
+            raw_matrix.push(val);
+            total -= val;
+        }
+
+        raw_matrix.push(total);
+
+        Self { matrix: raw_matrix }
     }
 
     // Create an empty start matrix
@@ -382,6 +427,17 @@ mod tests_transition_matrix {
 
         transition_matrix[(&state1, &state2)] = 0.6;
         assert_eq!(transition_matrix[(&state1, &state2)], 0.6);
+    }
+
+    // Test the generate random matrix method
+    #[test]
+    fn test_random_transition_matrix_valid() {
+        for _ in 0..1000 {
+            let num_states = 3; 
+            let transition_matrix = TransitionMatrix::new_random(num_states);
+            
+            assert!(transition_matrix.validate().is_ok());
+        }
     }
 
 }

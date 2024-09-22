@@ -1,1 +1,1 @@
-mod hmm;
+pub mod hmm;
