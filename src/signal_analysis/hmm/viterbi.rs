@@ -70,9 +70,6 @@ impl<'a> Viterbi<'a> {
         
     }
 
-
-
-
     pub fn setup_algo(&self, observations: &[f64], check_validity: bool) -> 
     Result<(StateMatrix2D<f64>, StateMatrix2D<usize>, Vec<usize>), HMMInstanceError> {
         // Check validity of inputs
@@ -91,7 +88,7 @@ impl<'a> Viterbi<'a> {
         Ok((viterbi_probs, backtrace_mat, ml_path))
     }
 
-    pub fn run(&mut self, observations: &[f64], check_validity: bool) -> Result<&[usize],HMMInstanceError> {
+    pub fn run(&mut self, observations: &[f64], check_validity: bool) -> Result<(),HMMInstanceError> {
         
         // Collect the allocated memory
         let (mut viterbi_probs, mut bactrace_mat, mut ml_path) = self.setup_algo(observations, check_validity)?;
@@ -178,7 +175,12 @@ impl<'a> Viterbi<'a> {
         self.ml_path = Some(ml_path);
 
 
-        Ok(self.ml_path.as_ref().unwrap())
+        Ok(())
+    }
+
+
+    pub fn get_prediction(&self) -> &Option<Vec<usize>> {
+        &self.ml_path
     }
 }
 

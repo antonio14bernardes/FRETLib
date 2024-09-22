@@ -129,7 +129,7 @@ impl<'a> HMMInstance<'a> {
         Ok(())
     }
 
-    pub fn run_viterbi(&mut self, observations: &[f64]) -> Result<&[usize],HMMInstanceError> {
+    pub fn run_viterbi(&mut self, observations: &[f64]) -> Result<(),HMMInstanceError> {
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
         self.viterbi.run(observations, false)
     }
@@ -156,6 +156,7 @@ impl<'a> HMMInstance<'a> {
             final_prob += self.forward_mat.as_ref().unwrap()[state][observations.len()-1]
         }
         self.final_prob = Some(final_prob);
+
         Ok(())
     }
 
@@ -175,6 +176,23 @@ impl<'a> HMMInstance<'a> {
         
         Ok(())
     }
+
+    pub fn get_viterbi_prediction(&self) -> &Option<Vec<usize>> {
+        &self.viterbi.get_prediction()
+    }
+
+    pub fn get_forward_probabilities_matrix(&self) -> Option<&StateMatrix2D<f64>> {
+        if let Some(matrix) = self.forward_mat.as_ref() {
+            return Some(matrix)
+        } else { return None }
+    }
+
+    pub fn get_backward_probabilities_matrix(&self) -> Option<&StateMatrix2D<f64>> {
+        if let Some(matrix) = self.backward_mat.as_ref() {
+            return Some(matrix)
+        } else { return None }
+    }
+
 
 
 
@@ -255,20 +273,23 @@ fn compute_beta_i_t(current_state: &State, time_step: usize, observations: &[f64
     } else {
         let mut sum:f64 = 0.0;
         for next_state in states {
-            sum += transition_matrix[(current_state, next_state)] * 
-            next_state.standard_gaussian_emission_probability(observations[time_step + 1]) *
-            betas_matrix[next_state][time_step + 1];
+            let transition_prob = transition_matrix[(current_state, next_state)];
+            let emission_prob = next_state.standard_gaussian_emission_probability(observations[time_step + 1]);
+            let prev_beta = betas_matrix[next_state][time_step + 1];
+            sum +=  transition_prob * emission_prob * prev_beta;
         }
 
         betas_matrix[current_state][time_step] = sum;
     }
+
+
 }
 
 fn compute_betas(
     states: &[State], observations: &[f64],
     transition_matrix: &TransitionMatrix, betas_matrix: &mut StateMatrix2D<f64>) {
     
-    for time_step in (0..observations.len() - 1).rev() {
+    for time_step in (0..observations.len()).rev() {
         for state in states {
             compute_beta_i_t(state, time_step, observations, states, transition_matrix, betas_matrix);
         }
