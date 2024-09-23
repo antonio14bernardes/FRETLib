@@ -24,6 +24,18 @@ impl State {
         self.name = Some(name);
     }
 
+    pub fn get_name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    pub fn get_value(&self) -> f64 {
+        self.value
+    }
+
+    pub fn get_noise_std(&self) -> f64 {
+        self.noise_std
+    }
+
     // Method to calculate the  emission probability based on an observed FRET value using
     // the standard Gaussian
     pub fn standard_gaussian_emission_probability(&self, observed_fret: f64) -> f64 {
