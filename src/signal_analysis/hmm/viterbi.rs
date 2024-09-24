@@ -182,5 +182,8 @@ impl<'a> Viterbi<'a> {
     pub fn get_prediction(&self) -> &Option<Vec<usize>> {
         &self.ml_path
     }
-}
 
+    pub fn take_prediction(&mut self) -> Option<Vec<usize>> {
+        self.ml_path.take()
+    }
+}

@@ -19,6 +19,7 @@ pub mod probability_matrices;
 pub mod viterbi;
 pub mod hmm_instance;
 pub mod baum_welch;
+pub mod optimization_tracker;
 
 use state::*;
 use probability_matrices::*; 

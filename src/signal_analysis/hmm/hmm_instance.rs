@@ -258,11 +258,13 @@ impl<'a> HMMInstance<'a> {
 
         // Create the gammas matrix
         let xis: StateMatrix3D<f64> = StateMatrix3D::<f64>::empty((states.len(), states.len(), observations.len()-1));
+
+    
         self.xis = Some(xis);
 
         compute_xis(states, observations, transition_matrix, alphas, betas, self.xis.as_mut().unwrap());
 
-
+        //println!("New Xis: {:?}", &self.xis);
         Ok(())
     }
 
@@ -301,6 +303,106 @@ impl<'a> HMMInstance<'a> {
         } else { return None }
     }
 
+    pub fn get_observations_prob(&self) -> Option<&f64> {
+        self.observations_prob.as_ref()
+    }
+
+    pub fn take_viterbi_prediction(&mut self) -> Option<Vec<usize>> {
+        self.viterbi.take_prediction()
+    }
+
+    pub fn take_alphas(&mut self) -> Option<StateMatrix2D<f64>> {
+        if let Some(matrix) = self.alphas.take() {
+            return Some(matrix)
+        } else { return None }
+    }
+
+    pub fn take_betas(&mut self) -> Option<StateMatrix2D<f64>> {
+        if let Some(matrix) = self.betas.take() {
+            return Some(matrix)
+        } else { return None }
+    }
+
+    pub fn take_gammas(&mut self) -> Option<StateMatrix2D<f64>> {
+        if let Some(matrix) = self.gammas.take() {
+            return Some(matrix)
+        } else { return None }
+    }
+
+    pub fn take_xis(&mut self) -> Option<StateMatrix3D<f64>> {
+        if let Some(matrix) = self.xis.take() {
+            return Some(matrix)
+        } else { return None }
+    }
+
+    pub fn take_observations_prob(&mut self) -> Option<f64> {
+        self.observations_prob.take()
+    }
+
+    pub fn generate_random_states(
+        num_states: u16,
+        max_value: Option<f64>,
+        min_value: Option<f64>,
+        max_noise: Option<f64>,
+        min_noise: Option<f64>,
+    ) -> Result<Vec<State>, StateError> {
+        loop {
+            let mut states = Vec::with_capacity(num_states as usize);
+    
+            // Generate the states
+            for id in 0..num_states {
+                let state = State::new_random(
+                    id as usize,
+                    max_value,  // max value for the state
+                    min_value,  // min value for the state
+                    max_noise,  // max noise
+                    min_noise,  // min noise
+                )?;
+                states.push(state);
+            }
+    
+            // Validate the generated states, retry if invalid
+            match HMMInstance::check_states_validity(&states) {
+                Ok(_) => return Ok(states),  // Return if valid
+                Err(_) => continue,          // Retry if validation fails
+            }
+        }
+    }
+
+    // The max and min values aren't those of the states but rather those of a possible observation.
+    // This function will divide the value range into num_states intervals and set each state with the mean of each partition
+    pub fn generate_sparse_states(
+        num_states: u16,
+        max_value: f64,
+        min_value: f64,
+        noise_std: f64,
+    ) -> Result<Vec<State>, HMMInstanceError> {
+        
+        let value_range = max_value - min_value;
+        if value_range <= 0.0 { return Err( HMMInstanceError::InvalidMaxMinValues { max: max_value, min: min_value })}
+
+    
+        let interval = value_range / num_states as f64;
+        let mut states = Vec::with_capacity(num_states as usize);
+    
+        // Assign the mean value of each interval to the state
+        for id in 0..num_states {
+            let state_value = min_value + (id as f64 + 0.5) * interval;
+            let state = State::new(id as usize, state_value, noise_std)
+            .map_err(|error| HMMInstanceError::StateError { error })?;
+            states.push(state);
+        }
+    
+        // Validate generated states
+        HMMInstance::check_states_validity(&states)?;
+    
+        Ok(states)
+    }
+
+
+
+    
+
 
 
 
@@ -326,8 +428,11 @@ pub enum HMMInstanceError {
         expected: Vec<usize>,
         found: Vec<usize>,
     },
-    DuplicateStateValues,                             // State values should be unique
+    DuplicateStateValues,                           // State values should be unique
     AlphasORBetasNotYetDefined,                     // Occurs when trying to compute gammas and xis without first computing alphas and betas
+
+    InvalidMaxMinValues {max: f64, min: f64},       // Max must be > than min
+    StateError {error: StateError},                 // Wrapper for a state error
 }
 
 

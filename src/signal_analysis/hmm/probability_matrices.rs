@@ -21,7 +21,7 @@ pub enum MatrixValidationError {
     InvalidValue                                                       // There is at least one value outside of [0.0, 1.0]
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TransitionMatrix {
     pub matrix: StateMatrix2D<f64>,  // Use StateMatrix2D instead of Vec<Vec<f64>>
 }
@@ -171,7 +171,7 @@ impl IndexMut<(&State, &State)> for TransitionMatrix {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StartMatrix {
     pub matrix: Vec<f64>,
 }
@@ -316,8 +316,8 @@ mod tests_transition_matrix {
     #[test]
     fn test_transition_matrix_get_set_state() {
         let mut transition_matrix = TransitionMatrix::empty(3);
-        let state1 = State::new(0, 0.5, 0.1);
-        let state2 = State::new(1, 0.7, 0.2);
+        let state1 = State::new(0, 0.5, 0.1).unwrap();
+        let state2 = State::new(1, 0.7, 0.2).unwrap();
 
         transition_matrix.set(&state1, &state2, 0.6);
         assert_eq!(transition_matrix.get(&state1, &state2), 0.6);
@@ -422,8 +422,8 @@ mod tests_transition_matrix {
     #[test]
     fn test_transition_matrix_indexing_state() {
         let mut transition_matrix = TransitionMatrix::empty(3);
-        let state1 = State::new(0, 0.5, 0.1);
-        let state2 = State::new(1, 0.7, 0.2);
+        let state1 = State::new(0, 0.5, 0.1).unwrap();
+        let state2 = State::new(1, 0.7, 0.2).unwrap();
 
         transition_matrix[(&state1, &state2)] = 0.6;
         assert_eq!(transition_matrix[(&state1, &state2)], 0.6);
@@ -474,8 +474,8 @@ mod tests_start_matrix {
     #[test]
     fn test_start_matrix_get_set_state() {
         let mut start_matrix = StartMatrix::empty(3);
-        let state1 = State::new(0, 0.5, 0.1);
-        let state2 = State::new(1, 0.7, 0.2);
+        let state1 = State::new(0, 0.5, 0.1).unwrap();
+        let state2 = State::new(1, 0.7, 0.2).unwrap();
 
         start_matrix.set(&state1, 0.6);
         assert_eq!(start_matrix.get(&state1), 0.6);
@@ -542,7 +542,7 @@ mod tests_start_matrix {
     #[test]
     fn test_start_matrix_indexing_state() {
         let mut start_matrix = StartMatrix::empty(3);
-        let state = State::new(0, 0.5, 0.1);
+        let state = State::new(0, 0.5, 0.1).unwrap();
 
         start_matrix[&state] = 0.6;
         assert_eq!(start_matrix[&state], 0.6);

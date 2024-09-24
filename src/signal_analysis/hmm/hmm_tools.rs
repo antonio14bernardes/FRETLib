@@ -302,6 +302,13 @@ impl<T> Index<(&State, &State, usize)> for StateMatrix3D<T> {
         &self.raw_matrix[states.0.get_id()][states.1.get_id()][states.2]
     }
 }
+impl<T> Index<(&State, &State)> for StateMatrix3D<T> {
+    type Output = [T];
+
+    fn index(&self, states: (&State, &State)) -> &Self::Output {
+        &self.raw_matrix[states.0.get_id()][states.1.get_id()]
+    }
+}
 
 // Implement IndexMut trait for mutable access
 impl<T> IndexMut<(usize, usize, usize)> for StateMatrix3D<T> {
@@ -317,6 +324,14 @@ impl<T> IndexMut<(&State, &State, usize)> for StateMatrix3D<T> {
         &mut self.raw_matrix[states.0.get_id()][states.1.get_id()][states.2]
     }
 }
+
+impl<T> IndexMut<(&State, &State)> for StateMatrix3D<T> {
+    fn index_mut(&mut self, states: (&State, &State)) -> &mut Self::Output {
+        &mut self.raw_matrix[states.0.get_id()][states.1.get_id()]
+    }
+}
+
+
 
 
 #[cfg(test)]
@@ -347,7 +362,7 @@ mod tests_state_matrix_1d {
     #[test]
     fn test_state_matrix_1d_get_set_state() {
         let mut state_matrix = StateMatrix1D::empty(3);
-        let state = State::new(1, 0.5, 0.1);
+        let state = State::new(1, 0.5, 0.1).unwrap();
         state_matrix.set(1, 99);
         assert_eq!(state_matrix.get(state.get_id()), &99);
     }
@@ -362,7 +377,7 @@ mod tests_state_matrix_1d {
     #[test]
     fn test_state_matrix_1d_index_state() {
         let mut state_matrix = StateMatrix1D::empty(3);
-        let state = State::new(2, 0.5, 0.1);
+        let state = State::new(2, 0.5, 0.1).unwrap();
         state_matrix[&state] = 200;
         assert_eq!(state_matrix[&state], 200);
     }
@@ -428,8 +443,8 @@ mod tests_state_matrix_2d {
     #[test]
     fn test_state_matrix_2d_get_set_states() {
         let mut state_matrix = StateMatrix2D::empty((3, 3));
-        let state1 = State::new(1, 0.5, 0.1);
-        let state2 = State::new(2, 0.7, 0.2);
+        let state1 = State::new(1, 0.5, 0.1).unwrap();
+        let state2 = State::new(2, 0.7, 0.2).unwrap();
         state_matrix.set((state1.id, state2.id), 99);
         assert_eq!(state_matrix.get((state1.id, state2.id)), &99);
     }
@@ -444,8 +459,8 @@ mod tests_state_matrix_2d {
     #[test]
     fn test_state_matrix_2d_index_states() {
         let mut state_matrix = StateMatrix2D::empty((3, 3));
-        let state1 = State::new(1, 0.5, 0.1);
-        let state2 = State::new(2, 0.7, 0.2);
+        let state1 = State::new(1, 0.5, 0.1).unwrap();
+        let state2 = State::new(2, 0.7, 0.2).unwrap();
         state_matrix[(&state1, &state2)] = 200;
         assert_eq!(state_matrix[(&state1, &state2)], 200);
     }
@@ -521,8 +536,8 @@ mod tests_state_matrix_3d {
     #[test]
     fn test_state_matrix_3d_get_set_states() {
         let mut state_matrix = StateMatrix3D::empty((3, 3, 2));
-        let state1 = State::new(1, 0.5, 0.1);
-        let state2 = State::new(2, 0.7, 0.2);
+        let state1 = State::new(1, 0.5, 0.1).unwrap();
+        let state2 = State::new(2, 0.7, 0.2).unwrap();
         state_matrix.set((state1.id, state2.id, 1), 99);
         assert_eq!(state_matrix.get((state1.id, state2.id, 1)), &99);
     }
@@ -537,8 +552,8 @@ mod tests_state_matrix_3d {
     #[test]
     fn test_state_matrix_3d_index_states() {
         let mut state_matrix = StateMatrix3D::empty((3, 3, 2));
-        let state1 = State::new(1, 0.5, 0.1);
-        let state2 = State::new(2, 0.7, 0.2);
+        let state1 = State::new(1, 0.5, 0.1).unwrap();
+        let state2 = State::new(2, 0.7, 0.2).unwrap();
         state_matrix[(&state1, &state2, 1)] = 200;
         assert_eq!(state_matrix[(&state1, &state2, 1)], 200);
     }

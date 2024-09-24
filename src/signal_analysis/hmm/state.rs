@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct State {
     pub id: usize,
     pub value: f64,
@@ -10,13 +10,51 @@ impl State {
     // Constructor to create a new State.
     // Name is always set to None when isntantiating
     // Use method set_name to give the state a cool name
-    pub fn new(id: usize, value: f64, noise_std: f64) -> Self {
-        State {
+    pub fn new(id: usize, value: f64, noise_std: f64) -> Result<Self, StateError> {
+        if noise_std <= 0.0 {
+            return Err(StateError::InvalidNoiseInput { input: noise_std });
+        }
+
+        Ok(State {
             id,
             value,
             noise_std,
             name: None,
+        })
+    }
+
+    pub fn new_random(
+        id: usize, 
+        max_value: Option<f64>, 
+        min_value: Option<f64>,
+        max_noise: Option<f64>, 
+        min_noise: Option<f64>
+    ) -> Result<Self, StateError> {
+
+        // Set default values if None is provided
+        let min_value = min_value.unwrap_or(0.0); // Min value defaults to 0
+        let max_value = max_value.unwrap_or(1.0); // max value defaults to 1
+        let value_range = max_value - min_value;
+
+        if value_range <= 0.0 { return Err(StateError::InvalidValueLimitInput { max: max_value, min: min_value })}
+    
+        let min_noise = min_noise.unwrap_or(value_range / 100.0); // Min noise defaults to 1/100 of the value_range
+        let max_noise = max_noise.unwrap_or(value_range / 10.0);  // Max noise defaults to 1/10 of the value range
+        let noise_range = max_noise - min_noise;
+        if noise_range <= 0.0 || max_noise <= 0.0 || min_noise <= 0.0 {
+            return Err(StateError::InvalidNoiseLimitInput { max: max_noise, min: min_noise });
         }
+
+        let value = rand::random::<f64>() * value_range + min_value;  // Random value between min_value and max_value
+        let noise_std = rand::random::<f64>() * noise_range + min_noise;  // Random noise between min_noise and max_noise
+
+    
+        Ok(State {
+            id,
+            value,
+            noise_std,
+            name: None,
+        })
     }
 
     // Method to baptize the state with a legit name
@@ -75,7 +113,12 @@ impl IDTarget for &State {
     }
 }
 
-
+#[derive(Debug)]
+pub enum StateError {
+    InvalidNoiseInput {input: f64},
+    InvalidNoiseLimitInput {max: f64, min: f64},
+    InvalidValueLimitInput {max: f64, min: f64},
+}
 
 #[cfg(test)]
 mod tests {
@@ -84,7 +127,7 @@ mod tests {
     // Test State creation with default values
     #[test]
     fn test_state_creation() {
-        let state = State::new(1, 0.5, 0.1);
+        let state = State::new(1, 0.5, 0.1).unwrap();
 
         assert_eq!(state.id, 1);
         assert_eq!(state.value, 0.5);
@@ -95,30 +138,16 @@ mod tests {
     // Test setting the name for a State
     #[test]
     fn test_set_name() {
-        let mut state = State::new(1, 0.5, 0.1);
+        let mut state = State::new(1, 0.5, 0.1).unwrap();
         state.set_name("TestState".to_string());
 
         assert_eq!(state.name, Some("TestState".to_string()));
     }
 
-    // Test standard Gaussian emission probability calculation
-    // #[test]
-    // fn test_standard_gaussian_emission_probability() {
-    //     let state = State::new(1, 0.5, 0.1);
-        
-    // }
-
-    // // Test paper Gaussian emission probability calculation
-    // #[test]
-    // fn test_paper_gaussian_emission_probability() {
-    //     let state = State::new(1, 0.5, 0.1);
-        
-    // }
-
     // Test IDTarget trait for State
     #[test]
     fn test_idtarget_for_state() {
-        let state = State::new(2, 0.7, 0.15);
+        let state = State::new(2, 0.7, 0.15).unwrap();
         assert_eq!(state.get_id(), 2);
     }
 
