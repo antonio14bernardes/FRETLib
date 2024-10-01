@@ -38,8 +38,8 @@ impl State {
 
         if value_range <= 0.0 { return Err(StateError::InvalidValueLimitInput { max: max_value, min: min_value })}
     
-        let min_noise = min_noise.unwrap_or(value_range / 100.0); // Min noise defaults to 1/100 of the value_range
-        let max_noise = max_noise.unwrap_or(value_range / 10.0);  // Max noise defaults to 1/10 of the value range
+        let min_noise = min_noise.unwrap_or(value_range / 20.0); // Min noise defaults to 1/20 of the value_range
+        let max_noise = max_noise.unwrap_or(value_range / 5.0);  // Max noise defaults to 1/5 of the value range
         let noise_range = max_noise - min_noise;
         if noise_range <= 0.0 || max_noise <= 0.0 || min_noise <= 0.0 {
             return Err(StateError::InvalidNoiseLimitInput { max: max_noise, min: min_noise });

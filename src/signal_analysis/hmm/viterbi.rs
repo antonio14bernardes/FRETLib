@@ -1,5 +1,5 @@
 use super::state::*;
-use super::probability_matrices::{TransitionMatrix, StartMatrix, ProbabilityMatrix, MatrixValidationError};
+use super::hmm_matrices::{TransitionMatrix, StartMatrix, ProbabilityMatrix, MatrixValidationError};
 use super::hmm_tools::{StateMatrix1D, StateMatrix2D};
 use super::hmm_instance::{HMMInstance, HMMInstanceError};
 

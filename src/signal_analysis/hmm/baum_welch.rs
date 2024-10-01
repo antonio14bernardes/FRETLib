@@ -1,7 +1,7 @@
 use super::hmm_tools::{StateMatrix1D, StateMatrix2D, StateMatrix3D};
 use super::optimization_tracker::{self, TerminationCriterium};
 use super::{state::*, viterbi};
-use super::probability_matrices::*;
+use super::hmm_matrices::*;
 use super::hmm_instance::*;
 use super::optimization_tracker::*;
 
@@ -92,14 +92,14 @@ impl BaumWelch {
         let mut state_collapse: bool = false;
         let mut collapsed_states: Vec<usize> = Vec::new();
 
+
         for state_from in states {
 
             // Compute sum for gamma[state_from][t=0 .. t = gammas.len() - 1]
-            let normalization_factor: f64 = gammas[state_from][0..gammas.len()-1].iter().sum();
-
-            //println!("Normalization: {:?}", &normalization_factor);
-
-            let epsilon = 1e-8;
+            let normalization_factor: f64 = gammas[state_from][0..gammas.shape().1-1].iter().sum();
+            
+            
+            let epsilon = 1e-12;
 
             if normalization_factor < epsilon {
                 state_collapse = true;
@@ -109,8 +109,7 @@ impl BaumWelch {
                     // Sum over all time steps (still unnormalized), and assign to running transition matrix
                     transition_matrix[(state_from, state_to)] = xis[(state_from, state_to)].iter().sum();
 
-                    println!("Unnormalized element {:?}", &transition_matrix[(state_from, state_to)]);
-                    println!("Normalization value {:?}", &normalization_factor);
+                    
 
                     // Normalize
                     transition_matrix[(state_from, state_to)] /= normalization_factor;
@@ -121,6 +120,7 @@ impl BaumWelch {
         if state_collapse {
             return Err(BaumWelchError::CollapsedStates { states: collapsed_states });
         }
+
 
         Ok(())
 
@@ -181,27 +181,32 @@ impl BaumWelch {
         transition_matrix: &mut TransitionMatrix,
         observations: &[f64]
     ) -> Result<f64, BaumWelchError> {
-        println!("\n\n\n Start new iter \n\n\n");
-        println!("States: {:?}\n", &states);
-        println!("Start Matrix: {:?}\n", &start_matrix);
-        println!("Transition Matrix: {:?}\n", &transition_matrix);
+        
         let mut hmm_instance = HMMInstance::new(states, start_matrix, transition_matrix);
         
         hmm_instance.run_viterbi(observations)
         .map_err(|error| BaumWelchError::HMMInstanceError { error })?;
 
-        println!("Got through Viterbi");
-
-        hmm_instance.run_all_probability_matrices(observations)
-        .map_err(|error| BaumWelchError::HMMInstanceError { error })?;
+        // hmm_instance.run_all_probability_matrices(observations)
+        // .map_err(|error| BaumWelchError::HMMInstanceError { error })?;
     
-        println!("Got through Probability Matrices");
+        hmm_instance.run_all_probability_matrices_with_scaled(observations)
+        .map_err(|error| BaumWelchError::HMMInstanceError { error })?;
 
         // Take ownership of the relevant date from hmm_instance
         let viterbi_pred_option = hmm_instance.take_viterbi_prediction();
         let gammas_option = hmm_instance.take_gammas();
         let xis_option = hmm_instance.take_xis();
         let observations_prob_option = hmm_instance.take_observations_prob();
+
+
+
+        // Debug stuff
+        // let alphas = hmm_instance.take_alphas().unwrap();
+        // let betas = hmm_instance.take_betas().unwrap();
+
+        
+
 
         // Kill hmm_instance
         drop(hmm_instance);
@@ -216,6 +221,12 @@ impl BaumWelch {
         let gammas = gammas_option.unwrap();
         let xis = xis_option.unwrap();
         let observations_prob = observations_prob_option.unwrap();
+
+        // println!("New alphas: {:?}\n", alphas);
+        // println!("New betas: {:?}\n", betas);
+        // println!("New gammas: {:?}\n", gammas);
+        // println!("New xis: {:?}\n", xis);
+        // println!("\n\n\n\n");
 
         Self::update_start_matrix(states, &gammas, start_matrix);
         Self::update_transition_matrix(states, &xis, &gammas, transition_matrix)?;

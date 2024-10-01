@@ -2,8 +2,9 @@ use std::collections::HashSet;
 
 use super::hmm_tools::{StateMatrix2D, StateMatrix3D};
 use super::state::*;
-use super::probability_matrices::*;
+use super::hmm_matrices::*;
 use super::viterbi::*;
+use super::probability_matrices::*;
 
 pub struct HMMInstance<'a> {
     states: Option<&'a [State]>,
@@ -12,8 +13,11 @@ pub struct HMMInstance<'a> {
 
     viterbi: Viterbi<'a>,
 
-    alphas: Option<StateMatrix2D<f64>>,  // Matrix with probabilities of ending up in state i on timestep t
-    betas: Option<StateMatrix2D<f64>>, // Matrix with probabilities of ending up in state i given the following observations and states
+    alphas: Option<StateMatrix2D<f64>>,  // Matrix with probabilities P(O_1, O_2, O_3, ..., O_t, state_t = Si | trans_mat, start_mat, state_set()
+    alphas_scaled: Option<StateMatrix2D<f64>>,
+    betas: Option<StateMatrix2D<f64>>, // Matrix with probabilities P(O_t+1, O_t+2, O_t+3, ..., O_T, state_t = Si | trans_mat, start_mat, state_set()
+    betas_scaled: Option<StateMatrix2D<f64>>,
+    scaling_factors: Option<Vec<f64>>,
     gammas: Option<StateMatrix2D<f64>>, // Probability of seeing state i on timestep t given both the previous and following observations and states
     xis: Option<StateMatrix3D<f64>>, // Probability of seeing transition i -> j on timestep t given everything we know 
     observations_prob: Option<f64>, // P(Observations | States, Start Matrix, Transition Matrix)
@@ -35,9 +39,15 @@ impl<'a> HMMInstance<'a> {
             viterbi,
 
             alphas: None,
+            alphas_scaled: None,
             betas: None,
+            betas_scaled: None,
+            scaling_factors: None,
             gammas: None,
             xis: None,
+
+            
+        
             observations_prob: None,
         }
     }
@@ -46,7 +56,8 @@ impl<'a> HMMInstance<'a> {
         let viterbi = Viterbi::new_empty();
 
         Self { states: None, start_matrix: None, transition_matrix: None, viterbi,
-        alphas: None, betas: None, gammas: None, xis: None, observations_prob: None }
+        alphas: None, alphas_scaled: None, betas: None, betas_scaled: None, scaling_factors: None,
+        gammas: None, xis: None, observations_prob: None }
     }
 
     pub fn reset(&mut self) {
@@ -264,7 +275,6 @@ impl<'a> HMMInstance<'a> {
 
         compute_xis(states, observations, transition_matrix, alphas, betas, self.xis.as_mut().unwrap());
 
-        //println!("New Xis: {:?}", &self.xis);
         Ok(())
     }
 
@@ -272,7 +282,164 @@ impl<'a> HMMInstance<'a> {
         self.run_alphas(observations)?;
         self.run_betas(observations)?;
         self.run_gammas(observations)?;
-        self.run_xis(observations)
+        self.run_xis(observations)?;
+
+        for mat in [&self.alphas, &self.betas, &self.gammas] {
+            println!("Matrix: {:?}\n", mat.as_ref().unwrap());
+        }
+
+        println!("Matrix: {:?}\n", &self.xis.as_ref().unwrap());
+
+        let mut sum_vec: Vec<f64> = Vec::new();
+        for t in 0..observations.len() - 1 {
+            let mut sum = 0.0;
+            for state_from in self.states.unwrap() {
+                for state_to in self.states.unwrap() {
+                    sum += &self.xis.as_ref().unwrap()[(state_from, state_to, t)];
+                }
+            }
+            sum_vec.push(sum);
+        }
+
+        Ok(())
+
+    }
+
+    pub fn run_alphas_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
+        Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+
+        // Extract states and matrices
+        let states = self.states.unwrap();
+        let start_matrix = self.start_matrix.unwrap();
+        let transition_matrix = self.transition_matrix.unwrap();
+        
+        // Create the alphas matrix
+        let alphas_scaled = StateMatrix2D::<f64>::empty((states.len(), observations.len()));
+        self.alphas_scaled = Some(alphas_scaled);
+        
+
+        let scaling_factors = compute_scaled_alphas(states, observations, 
+            start_matrix, transition_matrix,
+            self.alphas_scaled.as_mut().unwrap());
+
+        self.scaling_factors = Some(scaling_factors);
+        
+        let mut observations_prob: f64 = 1.0;
+        for factor in self.scaling_factors.as_ref().unwrap() {
+            observations_prob *= factor;
+        }
+        self.observations_prob = Some(observations_prob);
+
+        Ok(())
+    }
+
+    pub fn run_betas_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
+        Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+
+        // Extract states and matrices
+        let states = self.states.unwrap();
+        let transition_matrix = self.transition_matrix.unwrap();
+        
+        // Create the betas matrix
+        let betas_scaled = StateMatrix2D::<f64>::empty((states.len(), observations.len()));
+        self.betas_scaled = Some(betas_scaled);
+
+        // Extract scaling factors
+        let scaling_factors = self.scaling_factors.as_ref().ok_or(HMMInstanceError::ScalingFactorsNotYetDefined)?;
+
+        compute_scaled_betas(states, observations, transition_matrix, self.betas_scaled.as_mut().unwrap(), scaling_factors);
+        
+        Ok(())
+    }
+
+    pub fn run_gammas_with_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
+        Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        if self.alphas_scaled.is_none() || self.betas_scaled.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
+
+        // Extract states and matrices
+        let states = self.states.unwrap();
+        let alphas_scaled: &StateMatrix2D<f64> = self.alphas_scaled.as_ref().unwrap();
+        let betas_scaled = self.betas_scaled.as_ref().unwrap();
+
+        // Create the gammas matrix
+        let mut gammas = StateMatrix2D::<f64>::empty((states.len(), observations.len()));
+
+        compute_gammas(states, observations, alphas_scaled, betas_scaled, &mut gammas);
+
+        self.gammas = Some(gammas);
+
+        Ok(())
+    }
+
+    pub fn run_xis_with_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
+        Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        if self.alphas_scaled.is_none() || self.betas_scaled.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
+        if self.scaling_factors.is_none() {return Err(HMMInstanceError::ScalingFactorsNotYetDefined)}
+
+        // Extract states and matrices
+        let states: &[State] = self.states.unwrap();
+        let transition_matrix: &TransitionMatrix = self.transition_matrix.unwrap();
+        let alphas_scaled: &StateMatrix2D<f64> = self.alphas_scaled.as_ref().unwrap();
+        let betas_scaled: &StateMatrix2D<f64> = self.betas_scaled.as_ref().unwrap();
+        let scaling_factors = self.scaling_factors.as_ref().unwrap();
+
+        // Create the gammas matrix
+        let mut xis: StateMatrix3D<f64> = StateMatrix3D::<f64>::empty((states.len(), states.len(), observations.len()-1));
+
+        compute_xis_with_scaled(states, observations, transition_matrix, alphas_scaled, betas_scaled, &mut xis, scaling_factors);
+
+        self.xis = Some(xis);
+
+        Ok(())
+    }
+
+    pub fn run_all_probability_matrices_with_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
+        self.run_alphas_scaled(observations)?;
+        self.run_betas_scaled(observations)?;
+        self.run_gammas_with_scaled(observations)?;
+        self.run_xis_with_scaled(observations)?;
+
+        // for mat in [&self.alphas_scaled, &self.betas_scaled, &self.gammas] {
+        //     println!("Matrix: {:?}\n", mat.as_ref().unwrap());
+        // }
+
+        // println!("Matrix: {:?}\n", &self.xis.as_ref().unwrap());
+
+        let mut sum_gammas = Vec::<f64>::new();
+        let mut sum_xis = Vec::<f64>::new();
+        for t in 0..observations.len() - 1 {
+            let mut new_gamma = 0.0;
+            let mut new_xi = 0.0;
+            for state_from in self.states.unwrap() {
+                new_gamma += self.gammas.as_ref().unwrap()[state_from][t];
+
+                for state_to in self.states.unwrap(){
+                    new_xi += self.xis.as_ref().unwrap()[(state_from, state_to, t)];
+                }
+            }
+
+            sum_gammas.push(new_gamma);
+            sum_xis.push(new_xi);
+
+            if t == observations.len() - 2 {
+                println!("Sum gammas: {:?}", sum_gammas);
+                println!("Sum xis:{:?}", sum_xis);
+            }
+        }
+
+        // let mut sum_vec: Vec<f64> = Vec::new();
+        // for t in 0..observations.len() - 1 {
+        //     let mut sum = 0.0;
+        //     for state_from in self.states.unwrap() {
+        //         for state_to in self.states.unwrap() {
+        //             sum += &self.xis.as_ref().unwrap()[(state_from, state_to, t)];
+        //         }
+        //     }
+        //     sum_vec.push(sum);
+        // }
+
+        Ok(())
+
     }
 
     pub fn get_viterbi_prediction(&self) -> &Option<Vec<usize>> {
@@ -430,132 +597,8 @@ pub enum HMMInstanceError {
     },
     DuplicateStateValues,                           // State values should be unique
     AlphasORBetasNotYetDefined,                     // Occurs when trying to compute gammas and xis without first computing alphas and betas
+    ScalingFactorsNotYetDefined,
 
     InvalidMaxMinValues {max: f64, min: f64},       // Max must be > than min
     StateError {error: StateError},                 // Wrapper for a state error
-}
-
-
-fn compute_alpha_i_t(
-    current_state: &State, time_step: usize, observation_value: &f64,
-    start_matrix: &StartMatrix, transition_matrix: &TransitionMatrix, 
-    alphas_matrix: &mut StateMatrix2D<f64>) {
-
-    if time_step == 0 {
-        // Base case: alpha at time step 0 is just the start probability * emission probability
-        alphas_matrix[current_state.get_id()][time_step] = start_matrix[current_state];
-    } else {
-        let mut new_value: f64 = 0.;
-
-        // Sum over all previous states, following the transition probabilities
-        for previous_state_id in 0..start_matrix.matrix.len() {
-            let previous_alpha = alphas_matrix[previous_state_id][time_step - 1];
-
-            let transition_prob = transition_matrix[(previous_state_id, current_state.id)];
-
-            new_value += previous_alpha * transition_prob;
-        }
-
-        new_value *= current_state.standard_gaussian_emission_probability(*observation_value);
-
-        alphas_matrix[current_state.get_id()][time_step] = new_value;
-
-    }
-
-    
-}
-
-fn compute_alphas(
-    states: &[State], observations: &[f64],
-    start_matrix: &StartMatrix, transition_matrix: &TransitionMatrix,
-    alphas_matrix: &mut StateMatrix2D<f64>) {
-
-    
-    for (time_step, observation_value) in observations.iter().enumerate(){
-        for state in states {
-            compute_alpha_i_t(
-                state, time_step, observation_value, 
-                start_matrix, transition_matrix, alphas_matrix
-            );
-        }
-    }
-
-}
-
-fn compute_beta_i_t(current_state: &State, time_step: usize, observations: &[f64],
-    states: &[State], transition_matrix: &TransitionMatrix, betas_matrix: &mut StateMatrix2D<f64>) {
-
-    if time_step == observations.len() - 1 { // time_step_from_end = 0 for the last time step
-        betas_matrix[current_state][time_step] = 1.;
-    } else {
-        let mut sum:f64 = 0.0;
-        for next_state in states {
-            let transition_prob = transition_matrix[(current_state, next_state)];
-            let emission_prob = next_state.standard_gaussian_emission_probability(observations[time_step + 1]);
-            let prev_beta = betas_matrix[next_state][time_step + 1];
-            sum +=  transition_prob * emission_prob * prev_beta;
-        }
-
-        betas_matrix[current_state][time_step] = sum;
-    }
-
-
-}
-
-fn compute_betas(
-    states: &[State], observations: &[f64],
-    transition_matrix: &TransitionMatrix, betas_matrix: &mut StateMatrix2D<f64>) {
-    
-    for time_step in (0..observations.len()).rev() {
-        for state in states {
-            compute_beta_i_t(state, time_step, observations, states, transition_matrix, betas_matrix);
-        }
-    }
-}
-
-
-fn compute_gammas(
-    states: &[State], observations: &[f64],
-    alphas: &StateMatrix2D<f64>, betas: &StateMatrix2D<f64>, gammas: &mut StateMatrix2D<f64>
-) {
-    for i in 0..observations.len() {
-
-        let mut sum: f64 = 0.0;
-        for state in states {
-            let unnormalized_gamma = alphas[state][i] * betas[state][i];
-            sum += unnormalized_gamma;
-            gammas[state][i] = unnormalized_gamma;
-        }
-
-        for state in states {
-            gammas[state][i] /= sum;
-        }
-    }
-}
-
-
-fn compute_xis(states: &[State], observations: &[f64], transition_matrix: &TransitionMatrix,
-    alphas: &StateMatrix2D<f64>, betas: &StateMatrix2D<f64>, xis: &mut StateMatrix3D<f64>
-) {
-    for i in 0..observations.len()-1 {
-        let mut sum: f64 = 0.;
-        for state_from in states {
-            for state_to in states {
-                let unnormalized_xi = alphas[state_from][i]
-                            * transition_matrix[(state_from, state_to)]
-                            * state_to.standard_gaussian_emission_probability(observations[i+1])
-                            * betas[state_to][i+1];
-                
-                sum += unnormalized_xi;
-
-                xis[(state_from, state_to, i)] = unnormalized_xi;
-            }
-        }
-
-        for state_from in states {
-            for state_to in states {
-                xis[(state_from, state_to, i)] /= sum;
-            }
-        }        
-    }
 }

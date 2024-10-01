@@ -15,14 +15,15 @@ use rand_distr::{Distribution, Normal};
 
 pub mod hmm_tools;
 pub mod state;
-pub mod probability_matrices;
+pub mod hmm_matrices;
 pub mod viterbi;
 pub mod hmm_instance;
 pub mod baum_welch;
 pub mod optimization_tracker;
-
+pub mod probability_matrices;
 use state::*;
-use probability_matrices::*; 
+use hmm_matrices::*; 
+
 
 
 pub struct HMM {

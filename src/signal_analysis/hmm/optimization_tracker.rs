@@ -1,6 +1,6 @@
 pub struct OptimizationTracker {
     evals: Vec<f64>,
-    iters: u16,
+    iters: u32,
 
     termination_criterium: TerminationCriterium,
 
@@ -88,9 +88,9 @@ impl OptimizationTracker {
 }
 
 pub enum TerminationCriterium {
-    MaxIterations {max_iterations: u16},
-    OneStepConvergence {epsilon: f64, max_iterations: Option<u16>},
-    OneStepConvergenceAbsolute {epsilon: f64, max_iterations: Option<u16>},
-    PlateauConvergence {epsilon: f64, plateau_len: u16, max_iterations: Option<u16>},
-    PlateauConvergenceAbsolute {epsilon: f64, plateau_len: u16, max_iterations: Option<u16>},
+    MaxIterations {max_iterations: u32},
+    OneStepConvergence {epsilon: f64, max_iterations: Option<u32>},
+    OneStepConvergenceAbsolute {epsilon: f64, max_iterations: Option<u32>},
+    PlateauConvergence {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>},
+    PlateauConvergenceAbsolute {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>},
 }
