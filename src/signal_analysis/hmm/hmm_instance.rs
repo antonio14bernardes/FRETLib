@@ -306,6 +306,7 @@ impl<'a> HMMInstance<'a> {
     }
 
     pub fn run_alphas_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
+
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
 
         // Extract states and matrices
@@ -314,13 +315,12 @@ impl<'a> HMMInstance<'a> {
         let transition_matrix = self.transition_matrix.unwrap();
         
         // Create the alphas matrix
-        let alphas_scaled = StateMatrix2D::<f64>::empty((states.len(), observations.len()));
-        self.alphas_scaled = Some(alphas_scaled);
-        
+        let mut alphas_scaled = StateMatrix2D::<f64>::empty((states.len(), observations.len()));        
 
-        let scaling_factors = compute_scaled_alphas(states, observations, 
-            start_matrix, transition_matrix,
-            self.alphas_scaled.as_mut().unwrap());
+        let scaling_factors = compute_scaled_alphas
+        (states, observations, start_matrix, transition_matrix, &mut alphas_scaled);
+
+        self.alphas_scaled = Some(alphas_scaled);
 
         self.scaling_factors = Some(scaling_factors);
         
@@ -339,15 +339,16 @@ impl<'a> HMMInstance<'a> {
         // Extract states and matrices
         let states = self.states.unwrap();
         let transition_matrix = self.transition_matrix.unwrap();
-        
-        // Create the betas matrix
-        let betas_scaled = StateMatrix2D::<f64>::empty((states.len(), observations.len()));
-        self.betas_scaled = Some(betas_scaled);
 
         // Extract scaling factors
         let scaling_factors = self.scaling_factors.as_ref().ok_or(HMMInstanceError::ScalingFactorsNotYetDefined)?;
-
-        compute_scaled_betas(states, observations, transition_matrix, self.betas_scaled.as_mut().unwrap(), scaling_factors);
+        
+        // Create the betas matrix
+        let mut betas_scaled = StateMatrix2D::<f64>::empty((states.len(), observations.len()));
+        
+        compute_scaled_betas(states, observations, transition_matrix, &mut betas_scaled, scaling_factors);
+        
+        self.betas_scaled = Some(betas_scaled);
         
         Ok(())
     }
@@ -364,7 +365,7 @@ impl<'a> HMMInstance<'a> {
         // Create the gammas matrix
         let mut gammas = StateMatrix2D::<f64>::empty((states.len(), observations.len()));
 
-        compute_gammas(states, observations, alphas_scaled, betas_scaled, &mut gammas);
+        compute_gammas_with_scaled(states, observations, alphas_scaled, betas_scaled, &mut gammas);
 
         self.gammas = Some(gammas);
 
@@ -390,6 +391,8 @@ impl<'a> HMMInstance<'a> {
 
         self.xis = Some(xis);
 
+        
+
         Ok(())
     }
 
@@ -399,44 +402,6 @@ impl<'a> HMMInstance<'a> {
         self.run_gammas_with_scaled(observations)?;
         self.run_xis_with_scaled(observations)?;
 
-        // for mat in [&self.alphas_scaled, &self.betas_scaled, &self.gammas] {
-        //     println!("Matrix: {:?}\n", mat.as_ref().unwrap());
-        // }
-
-        // println!("Matrix: {:?}\n", &self.xis.as_ref().unwrap());
-
-        let mut sum_gammas = Vec::<f64>::new();
-        let mut sum_xis = Vec::<f64>::new();
-        for t in 0..observations.len() - 1 {
-            let mut new_gamma = 0.0;
-            let mut new_xi = 0.0;
-            for state_from in self.states.unwrap() {
-                new_gamma += self.gammas.as_ref().unwrap()[state_from][t];
-
-                for state_to in self.states.unwrap(){
-                    new_xi += self.xis.as_ref().unwrap()[(state_from, state_to, t)];
-                }
-            }
-
-            sum_gammas.push(new_gamma);
-            sum_xis.push(new_xi);
-
-            if t == observations.len() - 2 {
-                println!("Sum gammas: {:?}", sum_gammas);
-                println!("Sum xis:{:?}", sum_xis);
-            }
-        }
-
-        // let mut sum_vec: Vec<f64> = Vec::new();
-        // for t in 0..observations.len() - 1 {
-        //     let mut sum = 0.0;
-        //     for state_from in self.states.unwrap() {
-        //         for state_to in self.states.unwrap() {
-        //             sum += &self.xis.as_ref().unwrap()[(state_from, state_to, t)];
-        //         }
-        //     }
-        //     sum_vec.push(sum);
-        // }
 
         Ok(())
 

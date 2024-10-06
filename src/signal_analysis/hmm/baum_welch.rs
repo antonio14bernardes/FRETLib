@@ -146,7 +146,7 @@ impl BaumWelch {
         let mut collapsed_states: Vec<usize> = Vec::new();
 
         for state in states {
-            if per_state_collection[state.id].len() == 0 {
+            if per_state_collection[state.id].len() <= 1 {
                 state_collapse = true;
                 collapsed_states.push(state.get_id());
             } else {

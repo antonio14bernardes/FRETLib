@@ -96,8 +96,9 @@ impl ProbabilityMatrix for TransitionMatrix {
     
         for (i, row) in self.matrix.iter().enumerate() {
 
+            let margin = 1e-4;
             // Check if values are valid
-            if row.iter().any(|&val| val < 0.0 || val > 1.0) {
+            if row.iter().any(|&val| val < 0.0 || val > 1.0 + margin) {
                 return Err(MatrixValidationError::InvalidValue);
             }
 
@@ -108,7 +109,7 @@ impl ProbabilityMatrix for TransitionMatrix {
             // Check if the row doesn't sum to 1.0
             else {
                 let sum: f64 = row.iter().sum();
-                if (sum - 1.0).abs() > 1e-4 {
+                if (sum - 1.0).abs() > margin {
                     incorrect_rows_id.push(i);
                     incorrect_rows_values.push(row.clone());
                 }
@@ -225,8 +226,9 @@ impl ProbabilityMatrix for StartMatrix {
     // Validate the 1D start matrix
     fn validate(&self) -> Result<(), MatrixValidationError> {
 
+        let margin = 1e-4;
         // Check if all values are valid
-        if self.matrix.iter().any(|&val| val < 0.0 || val > 1.0) {
+        if self.matrix.iter().any(|&val| val < 0.0 || val > 1.0 + margin) {
             return Err(MatrixValidationError::InvalidValue);
         }
 
@@ -237,7 +239,7 @@ impl ProbabilityMatrix for StartMatrix {
 
         // Check if the values in the matrix sum to 1.0 (with some tolerance for floating-point errors)
         let total_sum: f64 = self.matrix.iter().sum();
-        if (total_sum - 1.0).abs() > 1e-4 {
+        if (total_sum - 1.0).abs() > margin {
             return Err(MatrixValidationError::VectorIncorrectValues {
                 values: self.matrix.clone(),
             });

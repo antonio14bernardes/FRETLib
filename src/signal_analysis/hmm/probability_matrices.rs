@@ -1,5 +1,4 @@
 use core::f64;
-use std::thread::current;
 
 use super::hmm_tools::{StateMatrix2D, StateMatrix3D};
 use super::state::*;
@@ -45,7 +44,7 @@ pub fn compute_alphas(
 
     
     // Now exponentiate to get the actual alphas 
-    for t in (0..observations.len()) {
+    for t in 0..observations.len() {
         for state in states {
             compute_alpha_i_t(
                 state,
@@ -135,11 +134,10 @@ pub fn compute_scaled_betas(
     scaling_factors: &[f64]
 ) {
 
-    // Compute the betas for the last timestep (these do not need scaling)
+    // Compute the betas for the last timestep (these do not need scaling?)
     for state in states {
         compute_beta_i_t(state, observations.len()-1, observations, transition_matrix, states, betas_matrix);
     }
-    // Now exponentiate to get the actual alphas 
     for t in (0..observations.len()-1).rev() {
         for state in states {
             compute_beta_i_t(state, t, observations, transition_matrix, states, betas_matrix);
@@ -183,6 +181,7 @@ pub fn compute_gammas_with_scaled(
             gammas[state][t] = scaled_alphas[state][t] * scaled_betas[state][t];
         }
     }
+
 }
 
 pub fn compute_xis(states: &[State], observations: &[f64], transition_matrix: &TransitionMatrix,
@@ -233,7 +232,7 @@ pub fn compute_xis_with_scaled(
                 let curr_prob = curr_alpha * transition_prob * emission_prob * next_beta;
                 let scaling_factor = scaling_factors[t+1];
 
-                xis[(state_from, state_to, t)] = curr_prob * scaling_factor;
+                xis[(state_from, state_to, t)] = curr_prob / scaling_factor;
             }
         }
     }
