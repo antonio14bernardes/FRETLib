@@ -18,10 +18,9 @@ impl IndividualTrace {
         Self { values: Vec::new(), trace_type: trace_type.clone()}
     }
 
-    pub fn checked_validity(&self) -> Result<(), IndividualTraceError> {
-        check_trace_validity(&self.values)?;
+    pub fn check_validity(&self) -> Result<(), IndividualTraceError> {
+        check_trace_validity(&self.values)
 
-        Ok(())
     }
 
     pub fn get_values(&self) -> &[f64] {
@@ -30,6 +29,10 @@ impl IndividualTrace {
 
     pub fn get_type(&self) -> &TraceType {
         &self.trace_type
+    }
+
+    pub fn get_len(&self) -> usize {
+        self.values.len()
     }
 
     pub fn detect_photobleaching_event(&self, threshold: f64, window_size: usize) -> Option<usize> {
@@ -50,14 +53,21 @@ impl IndividualTrace {
         None // No photobleaching event detected
     }
 
-    pub fn snr(&self) -> f64 {
+    pub fn snr(&self) -> Result<f64, IndividualTraceError> {
 
-        compute_snr(&self.values)
+        if self.values.len() < 2 {return Err(IndividualTraceError::NotEnoughValues)}
+        Ok(compute_snr(&self.values))
     }
 
     pub fn snr_before_after_bleaching(&self, pb_event: usize) -> Result<[f64; 2], IndividualTraceError>{
 
-        self.checked_validity()?;
+        if pb_event >= self.values.len() {
+            return Err(IndividualTraceError::InvalidTimeStepINdex);
+        }
+
+        if pb_event > self.values.len() - 3 {
+            return Err(IndividualTraceError::NotEnoughValues);
+        }
 
         let before = compute_snr(&self.values[0..pb_event]);
         let after = compute_snr(&self.values[pb_event + 1 .. self.values.len()]);
@@ -67,30 +77,57 @@ impl IndividualTrace {
 
     pub fn noise_post_bleaching(&self, pb_event: usize) -> Result<f64, IndividualTraceError> {
 
-        self.checked_validity()?;
+        if pb_event >= self.values.len() - 1{
+            return Err(IndividualTraceError::InvalidTimeStepINdex);
+        }
 
         let [_, std] = compute_mean_and_std(&self.values[pb_event + 1 .. self.values.len()]);
 
         Ok(std)
     }
 
-    pub fn first_value(&self) -> Result<f64, IndividualTraceError> {
+    pub fn first_value(&self) -> f64 {
         
-        self.checked_validity()?;
-
-        Ok(self.values[0])
+        self.values[0]
     }
 
-    pub fn max_min_values(&self) -> Result<[f64; 2], IndividualTraceError> {
-        self.checked_validity()?;
+    pub fn max_min_values(&self) -> [f64; 2]{
 
-        // Use iterators to find the max and min values
+        // find the max and min values
         let max = *self.values.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
         let min = *self.values.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
 
 
-        Ok([max, min]) 
-    }              
+        [max, min]
+    }
+
+    pub fn lifetimes(&self, threshold: f64, min_len: usize) ->  Vec<[usize; 2]>{
+        let mut lifetimes_vec: Vec<[usize; 2]> = Vec::new();
+
+        let mut in_run=false;
+        let mut curr_run_start: usize = 0;
+        for (i, value) in self.values.iter().enumerate() {
+            if *value > threshold {
+                if !in_run {
+                    in_run = true;
+                    curr_run_start = i;
+                }
+            } else {
+                if in_run {
+                    if i - curr_run_start >= min_len {
+                        lifetimes_vec.push([curr_run_start, i]);
+                    }
+                    in_run = false;
+                }
+            }
+        }
+
+        if in_run && (self.values.len() - curr_run_start >= min_len) {
+            lifetimes_vec.push([curr_run_start, self.values.len()]);
+        }
+
+        lifetimes_vec
+    }
 
 }
 
@@ -128,12 +165,15 @@ pub enum TraceType {
     UncorrectedS,
     UncorrectedE,
     IdealizedE,
+    TotalPairIntensity,
 }
 
 #[derive(Debug, Clone)]
 pub enum IndividualTraceError {
     EmptyTraceVector,
     IncludesNaNs,
+    InvalidTimeStepINdex,
+    NotEnoughValues,
 }
 
 

@@ -1,4 +1,5 @@
 use super::individual_trace::*;
+use super::filters::compute_mean_and_std;
 use std::collections::HashSet;
 
 
@@ -46,8 +47,7 @@ impl PointTraces {
             mean_total_intensity: None
         };
 
-        let _ = new.check_donor_acceptor();
-        let _ = new.check_donor_acceptor_pair();
+        let _ = new.update_donor_acceptor();
 
         new
     }
@@ -79,6 +79,9 @@ impl PointTraces {
                 // Try to insert the trace into the HashSet
                 if self.traces.insert(trace) {
                     self.update_donor_acceptor();
+
+                    let _ = self.update_donor_acceptor();
+
                     Ok(())
                 } else {
                     Err(PointTracesError::TraceTypeAlreadyPresent{trace_type: trace_type.clone()})
@@ -92,6 +95,9 @@ impl PointTraces {
         let trace_type = trace.get_type().clone();
         if self.traces.insert(trace)  {
             self.update_donor_acceptor();
+
+            let _ = self.update_donor_acceptor();
+
             Ok(())
         } else {
             Err(PointTracesError::TraceTypeAlreadyPresent{trace_type: trace_type})
@@ -123,6 +129,16 @@ impl PointTraces {
         self.update_donor_acceptor();
 
         output
+    }
+
+    pub fn get_types(&self) -> Vec<TraceType> {
+        let mut types_vec: Vec<TraceType> = Vec::new();
+
+        for trace in self.traces.iter() {
+            types_vec.push(trace.get_type().clone());
+        }
+
+        types_vec
     }
 
     pub fn insert_metadata(&mut self, metadata_obj: PointFileMetadata) {
@@ -174,12 +190,12 @@ impl PointTraces {
 
         // Priority is given to a processed pair
         if self.get_trace(&TraceType::AemDexc).is_some() {
-            self.donor = Some(TraceType::AemDexc);
+            self.acceptor = Some(TraceType::AemDexc);
             return Ok(());
         }
 
         if self.get_trace(&TraceType::RawAemDexc).is_some() {
-            self.donor = Some(TraceType::RawAemDexc);
+            self.acceptor = Some(TraceType::RawAemDexc);
             return Ok(());
         }
 
@@ -193,6 +209,14 @@ impl PointTraces {
         self.check_acceptor()?;
 
         Ok(())
+    }
+
+    pub fn get_donor_acceptor_pair(&self) -> Option<&[TraceType;2]> {
+        self.don_acc_pair.as_ref()
+    }
+
+    pub fn get_donor_acceptor(&self) -> [Option<&TraceType>;2] {
+        [self.donor.as_ref(), self.acceptor.as_ref()]
     }
 
 
@@ -234,7 +258,47 @@ impl PointTraces {
     }
 
 
+    pub fn compute_total_pair_intensity(&mut self) -> Result<[f64; 2], PointTracesError> {
+
+        let [donor, acceptor] = self.don_acc_pair.as_ref().ok_or(PointTracesError::NoDonorAcceptorPairFound)?;
+
+        let d_values = self.get_trace(donor).unwrap().get_values();
+        let a_values = self.get_trace(acceptor).unwrap().get_values();
+        let mut sum_vec: Vec<f64> = Vec::new();
+
+        for (d, a) in d_values.iter().zip(a_values) {
+            sum_vec.push(a + d);
+        }
+
+        let [mean, std] = compute_mean_and_std(&sum_vec);
+
+        if let Ok(new_trace) = IndividualTrace::new(sum_vec, TraceType::TotalPairIntensity) {
+            self.insert_trace(new_trace);
+        }
+
+        Ok([mean, std])  
+    }
     
+    pub fn compute_pair_correlation(&self) -> Result<f64, PointTracesError> {
+        let [donor, acceptor] = self.don_acc_pair.as_ref().ok_or(PointTracesError::NoDonorAcceptorPairFound)?;
+        
+        let d_values = self.get_trace(donor).unwrap().get_values();
+        let a_values = self.get_trace(acceptor).unwrap().get_values();
+
+        let [d_mean, d_std] = compute_mean_and_std(d_values);
+        let [a_mean, a_std] = compute_mean_and_std(a_values);
+
+        let mut numerator = 0.0;
+        let denominator = d_std * a_std;
+
+        if denominator == 0.0 {return Err(PointTracesError::StdZero)}
+
+        for (d, a) in d_values.iter().zip(a_values) {
+            numerator += (d - d_mean) * (a - a_mean);
+        }
+
+        Ok(numerator/denominator)
+    }
 }
 
 #[derive(Debug)]
@@ -262,4 +326,5 @@ pub enum PointTracesError {
     NoDonorAcceptorPairFound,
     NoDonorFound,
     NoAcceptorFound,
+    StdZero
 }

@@ -2,11 +2,14 @@ pub fn median_filter(values: &[f64], window_size: usize) -> Vec<f64> {
     let mut filtered = Vec::with_capacity(values.len());
     for i in 0..values.len() {
         let start = i.saturating_sub(window_size / 2);
-        let end = (i + window_size / 2).min(values.len());
+        let end = (i + window_size / 2 + 1).min(values.len());
+
         let mut window: Vec<f64> = values[start..end].to_vec();
         window.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        let median = if window.len() % 2 == 0 {
+        let median = if window.len() == 1 {
+            window[0]
+        } else if window.len() % 2 == 0 {
             (window[window.len() / 2 - 1] + window[window.len() / 2]) / 2.0
         } else {
             window[window.len() / 2]

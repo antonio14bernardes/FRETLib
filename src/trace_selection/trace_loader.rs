@@ -33,7 +33,7 @@ pub fn parse_file(file_path: &str) -> Result<PointTraces, TraceLoaderError> {
     let file = File::open(&path).map_err(|error| TraceLoaderError::IOError { error })?;
     let reader = io::BufReader::new(file);
 
-    let mut lines = reader.lines().enumerate();
+    let lines = reader.lines().enumerate();
 
     // Read the metadata lines
     let mut file_date = String::new();
@@ -96,7 +96,7 @@ pub fn parse_file(file_path: &str) -> Result<PointTraces, TraceLoaderError> {
 
     for (trace, header) in traces.into_iter().zip(headers.into_iter()) {
         point_traces.insert_new_trace(trace, header)
-        .map_err(|e| TraceLoaderError::PointTracesError { error: e })?;
+        .map_err(|e: PointTracesError| TraceLoaderError::PointTracesError { error: e })?;
     }
 
     point_traces.insert_metadata(metadata);
