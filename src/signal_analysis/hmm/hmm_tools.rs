@@ -120,111 +120,48 @@ impl<T> StateMatrix2D<T> {
 }
 
 // Implement Index trait for not mut
-impl<T> Index<usize> for StateMatrix1D<T> {
+impl<T, I: IDTarget> Index<I> for StateMatrix1D<T> {
     type Output = T;
 
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.raw_matrix[index]
+    fn index(&self, index: I) -> &Self::Output {
+        &self.raw_matrix[index.get_id()]
     }
 }
 
-impl<T> Index<&State> for StateMatrix1D<T> {
+impl<T, I: IDTarget, J: IDTarget> Index<(I, J)> for StateMatrix2D<T> {
     type Output = T;
 
-    fn index(&self, state: &State) -> &Self::Output {
-        &self.raw_matrix[state.get_id()]
+    fn index(&self, index: (I, J)) -> &Self::Output {
+        &self.raw_matrix[index.0.get_id()][index.1.get_id()]
     }
 }
 
-impl<T> Index<(usize, usize)> for StateMatrix2D<T> {
-    type Output = T;
-
-    fn index(&self, index: (usize, usize)) -> &Self::Output {
-        &self.raw_matrix[index.0][index.1]
-    }
-}
-
-impl<T> Index<(&State, &State)> for StateMatrix2D<T> {
-    type Output = T;
-
-    fn index(&self, states: (&State, &State)) -> &Self::Output {
-        &self.raw_matrix[states.0.get_id()][states.1.get_id()]
-    }
-}
-
-impl<T> Index<(&State, usize)> for StateMatrix2D<T> {
-    type Output = T;
-
-    fn index(&self, index: (&State, usize)) -> &Self::Output {
-        &self.raw_matrix[index.0.get_id()][index.1]
-    }
-}
-
-impl<T> Index<usize> for StateMatrix2D<T> {
+impl<T, I: IDTarget> Index<I> for StateMatrix2D<T> {
     type Output = Vec<T>;
 
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.raw_matrix[index]
+    fn index(&self, index: I) -> &Self::Output {
+        &self.raw_matrix[index.get_id()]
     }
 }
-
-impl<T> Index<&State> for StateMatrix2D<T> {
-    type Output = Vec<T>;
-
-    fn index(&self, state: &State) -> &Self::Output {
-        &self.raw_matrix[state.get_id()]
-    }
-}
-
 
 // Implement IndexMut trait for mut
-impl<T> IndexMut<usize> for StateMatrix1D<T> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.raw_matrix[index]
+impl<T, I: IDTarget> IndexMut<I> for StateMatrix1D<T> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        &mut self.raw_matrix[index.get_id()]
     }
 }
 
-impl<T> IndexMut<&State> for StateMatrix1D<T> {
-    fn index_mut(&mut self, state: &State) -> &mut Self::Output {
-        &mut self.raw_matrix[state.get_id()]
+impl<T, I: IDTarget, J: IDTarget> IndexMut<(I, J)> for StateMatrix2D<T> {
+    fn index_mut(&mut self, index: (I, J)) -> &mut Self::Output {
+        &mut self.raw_matrix[index.0.get_id()][index.1.get_id()]
     }
 }
 
-impl<T> IndexMut<(usize, usize)> for StateMatrix2D<T> {
-
-    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
-        &mut self.raw_matrix[index.0][index.1]
+impl<T, I: IDTarget> IndexMut<I> for StateMatrix2D<T> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        &mut self.raw_matrix[index.get_id()]
     }
 }
-
-impl<T> IndexMut<(&State, &State)> for StateMatrix2D<T> {
-
-    fn index_mut(&mut self, states: (&State, &State)) -> &mut Self::Output {
-        &mut self.raw_matrix[states.0.get_id()][states.1.get_id()]
-    }
-}
-
-impl<T> IndexMut<(&State, usize)> for StateMatrix2D<T> {
-
-    fn index_mut(&mut self, index: (&State, usize)) -> &mut Self::Output {
-        &mut self.raw_matrix[index.0.get_id()][index.1]
-    }
-}
-
-impl<T> IndexMut<usize> for StateMatrix2D<T> {
-
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.raw_matrix[index]
-    }
-}
-
-impl<T> IndexMut<&State> for StateMatrix2D<T> {
-
-    fn index_mut(&mut self, state: &State) -> &mut Self::Output {
-        &mut self.raw_matrix[state.get_id()]
-    }
-}
-
 
 #[derive(Debug, Clone)]
 pub struct StateMatrix3D<T> {
@@ -286,48 +223,33 @@ impl<T> StateMatrix3D<T> {
     }
 }
 
-// Implement Index trait for non-mutable access
-impl<T> Index<(usize, usize, usize)> for StateMatrix3D<T> {
+// // Implement Index trait for non-mutable access
+impl<T, I: IDTarget, J: IDTarget> Index<(I, J, usize)> for StateMatrix3D<T> {
     type Output = T;
 
-    fn index(&self, index: (usize, usize, usize)) -> &Self::Output {
-        &self.raw_matrix[index.0][index.1][index.2]
+    fn index(&self, index: (I, J, usize)) -> &Self::Output {
+        &self.raw_matrix[index.0.get_id()][index.1.get_id()][index.2]
     }
 }
 
-impl<T> Index<(&State, &State, usize)> for StateMatrix3D<T> {
-    type Output = T;
-
-    fn index(&self, states: (&State, &State, usize)) -> &Self::Output {
-        &self.raw_matrix[states.0.get_id()][states.1.get_id()][states.2]
-    }
-}
-impl<T> Index<(&State, &State)> for StateMatrix3D<T> {
+impl<T, I: IDTarget, J: IDTarget> Index<(I, J)> for StateMatrix3D<T> {
     type Output = [T];
 
-    fn index(&self, states: (&State, &State)) -> &Self::Output {
-        &self.raw_matrix[states.0.get_id()][states.1.get_id()]
+    fn index(&self, index: (I, J)) -> &Self::Output {
+        &self.raw_matrix[index.0.get_id()][index.1.get_id()]
     }
 }
 
 // Implement IndexMut trait for mutable access
-impl<T> IndexMut<(usize, usize, usize)> for StateMatrix3D<T> {
-
-    fn index_mut(&mut self, index: (usize, usize, usize)) -> &mut Self::Output {
-        &mut self.raw_matrix[index.0][index.1][index.2]
+impl<T, I: IDTarget, J: IDTarget> IndexMut<(I, J, usize)> for StateMatrix3D<T> {
+    fn index_mut(&mut self, index: (I, J, usize)) -> &mut Self::Output {
+        &mut self.raw_matrix[index.0.get_id()][index.1.get_id()][index.2]
     }
 }
 
-impl<T> IndexMut<(&State, &State, usize)> for StateMatrix3D<T> {
-
-    fn index_mut(&mut self, states: (&State, &State, usize)) -> &mut Self::Output {
-        &mut self.raw_matrix[states.0.get_id()][states.1.get_id()][states.2]
-    }
-}
-
-impl<T> IndexMut<(&State, &State)> for StateMatrix3D<T> {
-    fn index_mut(&mut self, states: (&State, &State)) -> &mut Self::Output {
-        &mut self.raw_matrix[states.0.get_id()][states.1.get_id()]
+impl<T, I: IDTarget, J: IDTarget> IndexMut<(I, J)> for StateMatrix3D<T> {
+    fn index_mut(&mut self, index: (I, J)) -> &mut Self::Output {
+        &mut self.raw_matrix[index.0.get_id()][index.1.get_id()]
     }
 }
 

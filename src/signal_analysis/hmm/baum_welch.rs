@@ -199,15 +199,6 @@ impl BaumWelch {
         let xis_option = hmm_instance.take_xis();
         let observations_prob_option = hmm_instance.take_observations_prob();
 
-
-
-        // Debug stuff
-        // let alphas = hmm_instance.take_alphas().unwrap();
-        // let betas = hmm_instance.take_betas().unwrap();
-
-        
-
-
         // Kill hmm_instance
         drop(hmm_instance);
 
@@ -221,12 +212,6 @@ impl BaumWelch {
         let gammas = gammas_option.unwrap();
         let xis = xis_option.unwrap();
         let observations_prob = observations_prob_option.unwrap();
-
-        // println!("New alphas: {:?}\n", alphas);
-        // println!("New betas: {:?}\n", betas);
-        // println!("New gammas: {:?}\n", gammas);
-        // println!("New xis: {:?}\n", xis);
-        // println!("\n\n\n\n");
 
         Self::update_start_matrix(states, &gammas, start_matrix);
         Self::update_transition_matrix(states, &xis, &gammas, transition_matrix)?;
@@ -246,8 +231,6 @@ impl BaumWelch {
 
         let observations_max = observations.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let observations_min = observations.iter().cloned().fold(f64::INFINITY, f64::min);
-
-
 
         if let Some(init) = self.initial_states.as_ref() {
             running_states = init.to_vec();
@@ -271,7 +254,6 @@ impl BaumWelch {
 
             let new_eval = Self::run_step(&mut running_states, &mut running_start_matrix, &mut running_transition_matrix, observations)?;
 
-
             if tracker.step(new_eval) {break}
         }
 
@@ -281,6 +263,18 @@ impl BaumWelch {
 
 
         Ok((self.final_states.as_ref().unwrap(), self.final_start_matrix.as_ref().unwrap(), self.final_transition_matrix.as_ref().unwrap()))
+    }
+
+    pub fn take_states(&mut self) -> Option<Vec<State>> {
+        self.final_states.take()
+    }
+
+    pub fn take_start_matrix(&mut self) -> Option<StartMatrix> {
+        self.final_start_matrix.take()
+    }
+
+    pub fn take_transition_matrix(&mut self) -> Option<TransitionMatrix> {
+        self.final_transition_matrix.take()
     }
 }
 

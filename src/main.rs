@@ -3,15 +3,17 @@ use fret_lib::signal_analysis::hmm::optimization_tracker::TerminationCriterium;
 use fret_lib::signal_analysis::hmm::state::State;
 use fret_lib::signal_analysis::hmm::hmm_matrices::{StartMatrix, TransitionMatrix};
 use fret_lib::signal_analysis::hmm::viterbi::Viterbi;
-use fret_lib::signal_analysis::hmm::HMM;
+use fret_lib::signal_analysis::hmm::{baum_welch, HMM};
 use fret_lib::signal_analysis::hmm::baum_welch::*;
 use rand::seq;
+use plotters::prelude::*;
+
 
 
 fn main() {
-        let real_state1 = State::new(0, 1.0, 0.2).unwrap();
-        let real_state2 = State::new(1, 3.0, 0.5).unwrap(); // Changed the ID to 2
-        let real_state3 = State::new(2, 5.0, 0.7).unwrap(); // Changed the ID to 3
+        let real_state1 = State::new(0, 10.0, 1.0).unwrap();
+        let real_state2 = State::new(1, 20.0, 2.0).unwrap(); // Changed the ID to 2
+        let real_state3 = State::new(2, 30.0, 3.0).unwrap(); // Changed the ID to 3
 
         let real_states = [real_state1, real_state2, real_state3].to_vec();
 
@@ -32,9 +34,9 @@ fn main() {
         /****** Create slightly off states and matrices ******/
 
 
-        let fake_state1 = State::new(0, 1.2, 0.1).unwrap();
-        let fake_state2 = State::new(1, 1.8, 0.3).unwrap();
-        let fake_state3 = State::new(2, 4.0, 1.0).unwrap();
+        let fake_state1 = State::new(0, 9.0, 1.2).unwrap();
+        let fake_state2 = State::new(1, 23.0, 1.2).unwrap();
+        let fake_state3 = State::new(2, 28.0, 2.7).unwrap();
 
         let fake_states = [fake_state1, fake_state2, fake_state3].to_vec();
 
@@ -57,86 +59,75 @@ fn main() {
 
         let termination_criterium = TerminationCriterium::MaxIterations { max_iterations: 100 };
 
-        let result = baum.run_optimization(&sequence_values, termination_criterium);
+        let output_res = baum.run_optimization(&sequence_values, termination_criterium);
 
-        println!("result: {:?}", result);
+        if output_res.is_err() {
+            println!("Optimization failed: {:?}", output_res);
+            return
+        }
 
 
-        
+
+        // For plotting
+        let opt_states = baum.take_states().unwrap();
+        let opt_start_matrix = baum.take_start_matrix().unwrap();
+        let opt_transition_matrix = baum.take_transition_matrix().unwrap();
+
+        let mut viterbi = Viterbi::new(&opt_states, &opt_start_matrix, &opt_transition_matrix);
+        viterbi.run(&sequence_values, true);
+
+        let predictions = viterbi.get_prediction().unwrap();
+
+        let sum: u16 = predictions.iter().zip(sequence_ids).map(|(a,b)| if *a == b {1_u16} else {0_u16}).sum();
+        let accuracy = (sum as f64) / (predictions.len() as f64);
+
+        println!("Prediction accuracy {}", accuracy);
+
+        let pred_ideal_sequence: Vec<f64> = predictions.iter().map(|id| opt_states[*id].get_value()).collect();
+
+        plot_sequences(&sequence_values, &pred_ideal_sequence).expect("Error while plotting sequences");
+
 }
 
 
+fn plot_sequences(sequence_values: &[f64], pred_ideal_sequence: &[f64]) -> Result<(), Box<dyn std::error::Error>> {
+    let root_area = BitMapBackend::new("sequence_plot.png", (800, 600)).into_drawing_area();
+    root_area.fill(&WHITE)?;
 
+    let x_range = 0..sequence_values.len();
+    let y_min = sequence_values.iter().cloned().fold(f64::INFINITY, f64::min)
+        .min(pred_ideal_sequence.iter().cloned().fold(f64::INFINITY, f64::min));
+    let y_max = sequence_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
+        .max(pred_ideal_sequence.iter().cloned().fold(f64::NEG_INFINITY, f64::max));
 
+    let mut chart = ChartBuilder::on(&root_area)
+        .caption("Sequence Values and Predicted Sequence", ("sans-serif", 50).into_font())
+        .margin(10)
+        .x_label_area_size(30)
+        .y_label_area_size(30)
+        .build_cartesian_2d(x_range.clone(), y_min..y_max)?;
 
+    chart.configure_mesh().draw()?;
 
+    // Plot sequence values as a red line
+    chart.draw_series(LineSeries::new(
+        sequence_values.iter().enumerate().map(|(i, &v)| (i, v)),
+        &RED,
+    ))?.label("Sequence Values")
+      .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
 
+    // Plot predicted ideal sequence values as a blue line
+    chart.draw_series(LineSeries::new(
+        pred_ideal_sequence.iter().enumerate().map(|(i, &v)| (i, v)),
+        &BLUE,
+    ))?.label("Predicted Ideal Sequence")
+      .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
 
+    // Add a legend to the chart
+    chart.configure_series_labels()
+        .background_style(&WHITE.mix(0.8))
+        .border_style(&BLACK)
+        .draw()?;
 
-
-
-
-
-
-
-
-// fn main() {
-//     let state1 = State::new(0, 10.0, 1.0).unwrap();
-//     let state2 = State::new(1, 20.0, 1.0).unwrap(); // Changed the ID to 2
-//     let state3 = State::new(2, 30.0, 1.0).unwrap(); // Changed the ID to 3
-
-//     let states = [state1, state2, state3];
-
-//     let start_matrix_raw: Vec<f64> = vec![0.5, 0.25, 0.25];
-//     let start_matrix = StartMatrix::new(start_matrix_raw);
-
-    
-//     let transition_matrix_raw: Vec<Vec<f64>> = vec![
-//         vec![0.5, 0.25, 0.25],
-//         vec![0.3, 0.4, 0.3],
-//         vec![0.2, 0.3, 0.5],
-//     ];
-//     let mut transition_matrix = TransitionMatrix::new(transition_matrix_raw);
-
-//     let mut hmm = HMMInstance::new(&states, &start_matrix, &transition_matrix);
-
-//     let (sequence_ids, sequence_values) = HMM::gen_sequence(&states, &start_matrix, &transition_matrix, 20);
-
-//     hmm.run_viterbi(&sequence_values);
-//     let viterbi_predictions = hmm.get_viterbi_prediction();
-
-//     println!("With first set of matrices: \n");
-//     println!("Real state sequence: {:?}", sequence_ids);
-//     println!("Predicted state sequence: {:?}", viterbi_predictions);
-
-//     // Change one of the process matrices - need to delete the hmm instance to do so and then create a new one
-//     drop(hmm);
-
-//     let transition_matrix_raw: Vec<Vec<f64>> = vec![
-//         vec![0.25, 0.5, 0.25],
-//         vec![0.3, 0.3, 0.4],
-//         vec![0.2, 0.3, 0.5],
-//     ];
-
-//     transition_matrix = TransitionMatrix::new(transition_matrix_raw);
-
-//     let mut hmm = HMMInstance::new(&states, &start_matrix, &transition_matrix);
-
-//     hmm.run_alphas(&sequence_values).unwrap();
-//     hmm.run_betas(&sequence_values).unwrap();
-//     hmm.run_gammas(&sequence_values).unwrap();
-//     hmm.run_xis(&sequence_values).unwrap();
-
-
-//     let alphas = hmm.get_alphas();
-//     let betas = hmm.get_betas();
-//     let gammas = hmm.get_gammas();
-//     let xis = hmm.get_xis();
-
-//     println!("With second set of matrices: \n");
-//     println!("alphas: {:?}", alphas);
-//     println!("betas: {:?}", betas);  
-//     println!("gammas: {:?}", gammas);
-//     println!("xis: {:?}", xis);  
-
-// }
+    Ok(())
+}

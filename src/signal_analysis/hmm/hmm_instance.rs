@@ -407,8 +407,8 @@ impl<'a> HMMInstance<'a> {
 
     }
 
-    pub fn get_viterbi_prediction(&self) -> &Option<Vec<usize>> {
-        &self.viterbi.get_prediction()
+    pub fn get_viterbi_prediction(&self) -> Option<&Vec<usize>> {
+        self.viterbi.get_prediction()
     }
 
     pub fn get_alphas(&self) -> Option<&StateMatrix2D<f64>> {
@@ -444,27 +444,19 @@ impl<'a> HMMInstance<'a> {
     }
 
     pub fn take_alphas(&mut self) -> Option<StateMatrix2D<f64>> {
-        if let Some(matrix) = self.alphas.take() {
-            return Some(matrix)
-        } else { return None }
+        self.alphas.take()
     }
-
+    
     pub fn take_betas(&mut self) -> Option<StateMatrix2D<f64>> {
-        if let Some(matrix) = self.betas.take() {
-            return Some(matrix)
-        } else { return None }
+        self.betas.take()
     }
-
+    
     pub fn take_gammas(&mut self) -> Option<StateMatrix2D<f64>> {
-        if let Some(matrix) = self.gammas.take() {
-            return Some(matrix)
-        } else { return None }
+        self.gammas.take()
     }
-
+    
     pub fn take_xis(&mut self) -> Option<StateMatrix3D<f64>> {
-        if let Some(matrix) = self.xis.take() {
-            return Some(matrix)
-        } else { return None }
+        self.xis.take()
     }
 
     pub fn take_observations_prob(&mut self) -> Option<f64> {

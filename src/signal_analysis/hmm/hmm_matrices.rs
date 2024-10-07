@@ -18,7 +18,7 @@ pub enum MatrixValidationError {
     RowsIncorrectValues { rows: Vec<usize>, values: Vec<Vec<f64>> },   // Rows are incorrect, doesn't sum to 1
     MatrixEmpty,                                                       // Entire matrix sums to 0
     RowsEmpty { rows: Vec<usize> },                                    // Rows are empty 
-    InvalidValue                                                       // There is at least one value outside of [0.0, 1.0]
+    InvalidValue                                                      // There is at least one value outside of [0.0, 1.0]
 }
 
 #[derive(Debug, Clone)]
@@ -138,39 +138,22 @@ impl ProbabilityMatrix for TransitionMatrix {
 }
 
 // Implement Index trait for not mut
-impl Index<(usize, usize)> for TransitionMatrix {
+impl<T: IDTarget> Index<(T, T)> for TransitionMatrix {
     type Output = f64;
 
-    fn index(&self, index: (usize, usize)) -> &Self::Output {
-        let (from, to) = index;
-        &self.matrix[from][to]
-    }
-}
-
-impl Index<(&State, &State)> for TransitionMatrix {
-    type Output = f64;
-
-    fn index(&self, index: (&State, &State)) -> &Self::Output {
-        let (from, to) = (index.0.id, index.1.id);
+    fn index(&self, index: (T, T)) -> &Self::Output {
+        let (from, to) = (index.0.get_id(), index.1.get_id());
         &self.matrix[from][to]
     }
 }
 
 // Implement IndexMut trait for mut
-impl IndexMut<(usize, usize)> for TransitionMatrix {
-    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
-        let (from, to) = index;
+impl<T: IDTarget> IndexMut<(T, T)> for TransitionMatrix {
+    fn index_mut(&mut self, index: (T, T)) -> &mut Self::Output {
+        let (from, to) = (index.0.get_id(), index.1.get_id());
         &mut self.matrix[from][to]
     }
 }
-
-impl IndexMut<(&State, &State)> for TransitionMatrix {
-    fn index_mut(&mut self, index: (&State, &State)) -> &mut Self::Output {
-        let (from, to) = (index.0.id, index.1.id);
-        &mut self.matrix[from][to]
-    }
-}
-
 
 #[derive(Debug, Clone)]
 pub struct StartMatrix {
@@ -250,35 +233,18 @@ impl ProbabilityMatrix for StartMatrix {
 }
 
 // Implement Index trait for not mut
-impl Index<usize> for StartMatrix {
+impl<T: IDTarget> Index<T> for StartMatrix {
     type Output = f64;
 
-    fn index(&self, index: usize) -> &Self::Output {
-
-        &self.matrix[index]
-    }
-}
-
-impl Index<&State> for StartMatrix {
-    type Output = f64;
-
-    fn index(&self, state: &State) -> &Self::Output {
-        
-        &self.matrix[state.id]
+    fn index(&self, index: T) -> &Self::Output {
+        &self.matrix[index.get_id()]
     }
 }
 
 // Implement IndexMut trait for mut
-impl IndexMut<usize> for StartMatrix {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        
-        &mut self.matrix[index]
-    }
-}
-
-impl IndexMut<&State> for StartMatrix {
-    fn index_mut(&mut self, state: &State) -> &mut Self::Output {
-        &mut self.matrix[state.id]
+impl<T: IDTarget> IndexMut<T> for StartMatrix {
+    fn index_mut(&mut self, index: T) -> &mut Self::Output {
+        &mut self.matrix[index.get_id()]
     }
 }
 
