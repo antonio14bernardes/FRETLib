@@ -3,7 +3,7 @@ use rand::Rng;
 use super::state::*;
 use super::hmm_tools::*;
 use std::ops::{Index, IndexMut};
-
+use std::collections::HashSet;
 pub trait ProbabilityMatrix {
 
     // Check if the matrix is valid
@@ -80,6 +80,47 @@ impl TransitionMatrix {
     // Set the probability of transitioning from one state to another
     pub fn set<T: IDTarget>(&mut self, from_state: T, to_state: T, prob: f64) {
         self.matrix.set((from_state.get_id(), to_state.get_id()), prob);  // Modify StateMatrix2D
+    }
+
+    // Remove a state from the matrix
+    pub fn remove_states<T: IDTarget>(&mut self, states: &[T]) {
+        let curr_num = self.matrix.shape().0;
+        let new_num = curr_num - states.len();
+        let mut new_mat: StateMatrix2D<f64> = StateMatrix2D::empty((new_num, new_num));
+        
+        // Set for fast lookup of states to be removed
+        let states_set: HashSet<usize> = states.iter().map(|s| s.get_id()).collect();
+
+        let mut i = 0_usize;
+        for state_from in 0..curr_num {
+            if states_set.contains(&state_from) {
+                continue; // If this state is to be removed, just go to the next one
+            }
+
+            let mut j = 0_usize;
+            for state_to in 0..curr_num {
+                if states_set.contains(&state_to) {
+                    continue; // If this state is to be removed, just go to the next one
+                }
+
+                // Fill in the new reduced matrix
+                new_mat[(i, j)] = self.matrix[(state_from, state_to)];
+                j += 1;
+            }
+            i += 1;
+        }
+
+        // Normalize rows
+        for row in 0..new_num {
+            let sum: f64 = new_mat[row].iter().sum();
+            if sum > 0.0 {
+                for val in new_mat[row].iter_mut() {
+                    *val /= sum;
+                }
+            }
+        }
+
+        self.matrix = new_mat;
     }
 }
 
@@ -201,6 +242,34 @@ impl StartMatrix {
     pub fn set<T: IDTarget>(&mut self, state: T, prob: f64) {
         self.matrix[state.get_id()] = prob;
     }
+
+    // Remove a state
+    pub fn remove_states<T: IDTarget>(&mut self, states: &[T]) {
+        let curr_num = self.matrix.len();
+        let new_num = curr_num - states.len();
+        let mut new_mat = Vec::with_capacity(new_num);
+
+        // Create a HashSet for fast lookup of states to be removed
+        let states_set: HashSet<usize> = states.iter().map(|s| s.get_id()).collect();
+
+        // Fill in remaining elements into new matrix
+        for (i, value) in self.matrix.iter().enumerate() {
+            if !states_set.contains(&i) {
+                new_mat.push(*value);
+            }
+        }
+
+        // Normalize the new matrix
+        let sum: f64 = new_mat.iter().sum();
+        if sum > 0.0 {
+            for value in new_mat.iter_mut() {
+                *value /= sum;
+            }
+        }
+
+        // Replace the old matrix with the new one
+        self.matrix = new_mat;
+    }
     
 }
 
@@ -230,6 +299,8 @@ impl ProbabilityMatrix for StartMatrix {
 
         Ok(())
     }
+
+    
 }
 
 // Implement Index trait for not mut
@@ -408,6 +479,27 @@ mod tests_transition_matrix {
         }
     }
 
+    // Test for removing states from matrix
+    #[test]
+    fn test_transition_matrix_remove_states() {
+        let mut transition_matrix = TransitionMatrix::new(vec![
+            vec![0.5, 0.3, 0.2],
+            vec![0.1, 0.8, 0.1],
+            vec![0.25, 0.25, 0.5],
+        ]);
+
+        let indices_to_remove = vec![1, 2];
+
+        transition_matrix.remove_states(&indices_to_remove);
+
+        
+        assert_eq!(transition_matrix.matrix.len(), 1);
+        assert_eq!(transition_matrix.matrix[0].len(), 1);
+        assert_eq!(transition_matrix.matrix[0][0], 1.0);
+
+        assert!(transition_matrix.validate().is_ok());
+    }
+
 }
 
 #[cfg(test)]
@@ -514,5 +606,26 @@ mod tests_start_matrix {
 
         start_matrix[&state] = 0.6;
         assert_eq!(start_matrix[&state], 0.6);
+    }
+
+
+    // Test for removing states from matrix
+    #[test]
+    fn test_remove_states_from_start_matrix() {
+        let mut start_matrix = StartMatrix::new(vec![0.4, 0.3, 0.2, 0.1]);
+
+        // Remove states at indices 1 and 2
+        let indices_to_remove = vec![1, 2];
+
+        start_matrix.remove_states(&indices_to_remove);
+
+        // After removing states 1 and 2, we should have [0.4, 0.1]
+        // After normalization, it should become [0.8, 0.2]
+        assert_eq!(start_matrix.matrix.len(), 2);
+        assert!((start_matrix.matrix[0] - 0.8).abs() < 1e-4);
+        assert!((start_matrix.matrix[1] - 0.2).abs() < 1e-4);
+
+        // Validate the new start matrix
+        assert!(start_matrix.validate().is_ok());
     }
 }

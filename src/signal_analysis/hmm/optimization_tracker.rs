@@ -4,7 +4,10 @@ pub struct OptimizationTracker {
 
     termination_criterium: TerminationCriterium,
 
-    plateau_count: Option<u16> // Used only for plateau convergence termination criterium
+    plateau_count: Option<u16>, // Used only for plateau convergence termination criterium
+
+    resets_count: u8,
+    max_resets: u8,
 
 }
 
@@ -20,8 +23,26 @@ impl OptimizationTracker {
             iters: 0,
             termination_criterium,
             plateau_count,
+            resets_count: 0,
+            max_resets: 0,
         }
         
+    }
+
+    pub fn set_max_resets(&mut self, max_resets: u8) {
+        self.max_resets = max_resets;
+    }
+
+    pub fn reset(&mut self) -> bool {
+        self.resets_count += 1;
+        
+        if self.max_resets < self.resets_count {return false}
+
+        self.evals = Vec::new();
+        self.iters = 0;
+        if let Some(_) = self.plateau_count {self.plateau_count = Some(0)}
+
+        true
     }
 
     pub fn max_iterations(&self) -> bool {
@@ -87,10 +108,18 @@ impl OptimizationTracker {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum TerminationCriterium {
     MaxIterations {max_iterations: u32},
     OneStepConvergence {epsilon: f64, max_iterations: Option<u32>},
     OneStepConvergenceAbsolute {epsilon: f64, max_iterations: Option<u32>},
     PlateauConvergence {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>},
     PlateauConvergenceAbsolute {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>},
+}
+
+#[derive(Debug)]
+pub enum StateCollapseHandle {
+    Abort,
+    RestartRandom {allowed_trials: u8},
+    RemoveCollapsedState,
 }

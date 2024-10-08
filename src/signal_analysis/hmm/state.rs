@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 #[derive(Debug, Clone)]
 pub struct State {
     pub id: usize,
@@ -120,6 +122,15 @@ pub enum StateError {
     InvalidValueLimitInput {max: f64, min: f64},
 }
 
+pub fn remove_from_state_vec<T: IDTarget>(states: &Vec<State>, to_remove: &[T]) -> Vec<State> {
+    let remove_set: HashSet<usize> = to_remove.iter().map(|state| state.get_id()).collect();
+
+    let mut new = states.clone();
+    new.retain(|state| !remove_set.contains(&state.get_id()));
+
+    new
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,5 +167,27 @@ mod tests {
     fn test_idtarget_for_usize() {
         let id: usize = 42;
         assert_eq!(id.get_id(), 42);
+    }
+
+    // Test removing state
+    #[test]
+    fn test_remove_from_state_vec() {
+        let mut states = vec![
+            State::new(0, 0.5, 0.1).unwrap(),
+            State::new(1, 0.7, 0.2).unwrap(),
+            State::new(2, 0.9, 0.3).unwrap(),
+            State::new(3, 1.1, 0.4).unwrap(),
+        ];
+
+        // Define a list of states to remove based on their IDs
+        let states_to_remove = vec![states[1].clone(), states[3].clone()]; // Remove states with IDs 1 and 3
+
+        // Call the function to remove states
+        states = remove_from_state_vec(&states, &states_to_remove);
+
+        // The resulting state vector should only have the states with IDs 0 and 2
+        assert_eq!(states.len(), 2);
+        assert_eq!(states[0].id, 0);
+        assert_eq!(states[1].id, 2);
     }
 }

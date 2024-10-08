@@ -328,6 +328,7 @@ impl<'a> HMMInstance<'a> {
         for factor in self.scaling_factors.as_ref().unwrap() {
             observations_prob *= factor;
         }
+        
         self.observations_prob = Some(observations_prob);
 
         Ok(())

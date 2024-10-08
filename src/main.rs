@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use fret_lib::signal_analysis::hmm::hmm_instance::HMMInstance;
 use fret_lib::signal_analysis::hmm::optimization_tracker::TerminationCriterium;
 use fret_lib::signal_analysis::hmm::state::State;
@@ -12,8 +14,8 @@ use plotters::prelude::*;
 
 fn main() {
         let real_state1 = State::new(0, 10.0, 1.0).unwrap();
-        let real_state2 = State::new(1, 20.0, 2.0).unwrap(); // Changed the ID to 2
-        let real_state3 = State::new(2, 30.0, 3.0).unwrap(); // Changed the ID to 3
+        let real_state2 = State::new(1, 20.0, 2.0).unwrap();
+        let real_state3 = State::new(2, 30.0, 3.0).unwrap();
 
         let real_states = [real_state1, real_state2, real_state3].to_vec();
 
@@ -22,13 +24,13 @@ fn main() {
 
         
         let real_transition_matrix_raw: Vec<Vec<f64>> = vec![
-            vec![0.2, 0.4, 0.4],
-            vec![0.2, 0.5, 0.3],
-            vec![0.7, 0.2, 0.1],
+            vec![0.8, 0.1, 0.1],
+            vec![0.1, 0.7, 0.2],
+            vec![0.2, 0.05, 0.75],
         ];
         let real_transition_matrix = TransitionMatrix::new(real_transition_matrix_raw);
 
-        let (sequence_ids, sequence_values) = HMM::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 200);
+        let (sequence_ids, sequence_values) = HMM::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 600);
 
 
         /****** Create slightly off states and matrices ******/
@@ -72,6 +74,12 @@ fn main() {
         let opt_states = baum.take_states().unwrap();
         let opt_start_matrix = baum.take_start_matrix().unwrap();
         let opt_transition_matrix = baum.take_transition_matrix().unwrap();
+        let obs_prob = baum.take_observations_prob().unwrap();
+
+        println!("New states: {:?}", &opt_states);
+        println!("New start matrix: {:?}", &opt_start_matrix);
+        println!("New transition matrix: {:?}", &opt_transition_matrix);
+        println!("Final observations prob: {}", &obs_prob);
 
         let mut viterbi = Viterbi::new(&opt_states, &opt_start_matrix, &opt_transition_matrix);
         viterbi.run(&sequence_values, true);

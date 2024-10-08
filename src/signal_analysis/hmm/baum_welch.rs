@@ -1,9 +1,11 @@
 use super::hmm_tools::{StateMatrix1D, StateMatrix2D, StateMatrix3D};
-use super::optimization_tracker::{self, TerminationCriterium};
+use super::optimization_tracker::{TerminationCriterium, StateCollapseHandle};
 use super::{state::*, viterbi};
 use super::hmm_matrices::*;
 use super::hmm_instance::*;
 use super::optimization_tracker::*;
+
+use std::collections::HashSet;
 
 #[derive(Debug)]
 pub struct BaumWelch {
@@ -16,6 +18,10 @@ pub struct BaumWelch {
     final_states: Option<Vec<State>>,
     final_start_matrix: Option<StartMatrix>,
     final_transition_matrix: Option<TransitionMatrix>,
+
+    final_observation_prob: Option<f64>,
+
+    state_collapse_handle: StateCollapseHandle,
 }
 
 impl BaumWelch {
@@ -31,6 +37,10 @@ impl BaumWelch {
             final_states: None,
             final_start_matrix: None,
             final_transition_matrix: None,
+
+            final_observation_prob: None,
+
+            state_collapse_handle: StateCollapseHandle::Abort, // Default to aborting
         }
         
     }
@@ -73,6 +83,11 @@ impl BaumWelch {
         self.initial_transition_matrix = Some(transition_matrix);
 
         Ok(())
+    }
+
+    pub fn set_state_collapse_handle(&mut self, state_collapse_handle: StateCollapseHandle) {
+
+        self.state_collapse_handle = state_collapse_handle;
     }
 
     pub fn update_start_matrix(states: &[State], gammas: &StateMatrix2D<f64>, start_matrix: &mut StartMatrix) {
@@ -203,20 +218,26 @@ impl BaumWelch {
         drop(hmm_instance);
 
         // Extract stuff from the options
-        if viterbi_pred_option.is_none() {return Err(BaumWelchError::ViterbiPredictionNotFound)}
-        if gammas_option.is_none() {return Err(BaumWelchError::HMMGammasNotFound)}
-        if xis_option.is_none() {return Err(BaumWelchError::HMMXisNotFound)}
-        if observations_prob_option.is_none() {return Err(BaumWelchError::HMMObservationProbNotFound)}
-
-        let viterbi_pred = viterbi_pred_option.unwrap();
-        let gammas = gammas_option.unwrap();
-        let xis = xis_option.unwrap();
-        let observations_prob = observations_prob_option.unwrap();
+        let viterbi_pred = viterbi_pred_option.ok_or(BaumWelchError::ViterbiPredictionNotFound)?;
+        let gammas = gammas_option.ok_or(BaumWelchError::HMMGammasNotFound)?;
+        let xis = xis_option.ok_or(BaumWelchError::HMMXisNotFound)?;
+        let observations_prob = observations_prob_option.ok_or(BaumWelchError::HMMObservationProbNotFound)?;
 
         Self::update_start_matrix(states, &gammas, start_matrix);
-        Self::update_transition_matrix(states, &xis, &gammas, transition_matrix)?;
-        Self::update_states(observations, &viterbi_pred, states);
+        let update_tr_mat_err = Self::update_transition_matrix(states, &xis, &gammas, transition_matrix);
+        let update_states_err = Self::update_states(observations, &viterbi_pred, states);
 
+        let mut collapsed_states: HashSet<usize> = HashSet::new();
+
+        if let Err(BaumWelchError::CollapsedStates { states }) = update_tr_mat_err {
+            collapsed_states.extend(states);
+        }
+
+        if let Err(BaumWelchError::CollapsedStates { states }) = update_states_err {
+            collapsed_states.extend(states);
+        }
+
+        if collapsed_states.len() != 0 {return Err(BaumWelchError::CollapsedStates { states: collapsed_states.into_iter().collect() })}
 
         Ok(observations_prob)
     }
@@ -225,36 +246,59 @@ impl BaumWelch {
 
         let mut tracker = OptimizationTracker::new(termination_criterium);
 
-        let mut running_states: Vec<State>;
-        let mut running_start_matrix: StartMatrix;
-        let mut running_transition_matrix: TransitionMatrix;
-
-        let observations_max = observations.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let observations_min = observations.iter().cloned().fold(f64::INFINITY, f64::min);
-
-        if let Some(init) = self.initial_states.as_ref() {
-            running_states = init.to_vec();
-        } else {
-            running_states = HMMInstance::generate_random_states(self.num_states, Some(observations_max), Some(observations_min), None, None).unwrap();
+        if let StateCollapseHandle::RestartRandom { allowed_trials} = self.state_collapse_handle {
+            tracker.set_max_resets(allowed_trials);
         }
 
-        if let Some(init) = self.initial_start_matrix.as_ref() {
-            running_start_matrix = init.clone();
-        } else {
-            running_start_matrix = StartMatrix::new_random(self.num_states as usize);
-        }
-
-        if let Some(init) = self.initial_transition_matrix.as_ref() {
-            running_transition_matrix = init.clone();
-        } else {
-            running_transition_matrix = TransitionMatrix::new_random(self.num_states as usize);
-        }
+        let (mut running_states, mut running_start_matrix, mut running_transition_matrix) =
+        setup_baum_welch(&self, observations, InitMode::GivenInits);
 
         loop {
 
-            let new_eval = Self::run_step(&mut running_states, &mut running_start_matrix, &mut running_transition_matrix, observations)?;
+            let new_output = Self::run_step(
+                &mut running_states,
+                &mut running_start_matrix,
+                &mut running_transition_matrix,
+                observations);
 
-            if tracker.step(new_eval) {break}
+            match new_output {
+                Ok(new_eval) => {
+                    self.final_observation_prob = Some(new_eval);
+                    if tracker.step(new_eval) {break}
+                },
+
+                Err(BaumWelchError::CollapsedStates { states }) => {
+
+                    match self.state_collapse_handle {
+                        StateCollapseHandle::Abort => {
+                            return Err(BaumWelchError::CollapsedStates { states: states })
+                        },
+
+                        StateCollapseHandle::RestartRandom{..} => {
+                            tracker.reset();
+
+                            setup_with_random(
+                                &self, observations,
+                                &mut running_states,
+                                &mut running_start_matrix,
+                                &mut running_transition_matrix
+                            );
+
+                        },
+
+                        StateCollapseHandle::RemoveCollapsedState => {
+                            self.num_states -= states.len() as u16;
+
+                            running_states = remove_from_state_vec(&running_states, &states);
+                            running_start_matrix.remove_states(&states);
+                            running_transition_matrix.remove_states(&states);
+                        },
+                    }
+
+                },
+                Err(err) => {return Err(err)}
+            } 
+            
         }
 
         self.final_states = Some(running_states);
@@ -276,7 +320,112 @@ impl BaumWelch {
     pub fn take_transition_matrix(&mut self) -> Option<TransitionMatrix> {
         self.final_transition_matrix.take()
     }
+
+    pub fn take_observations_prob(&mut self) -> Option<f64> {
+        self.final_observation_prob.take()
+    }
 }
+
+
+fn setup_baum_welch(baum_welch: &BaumWelch, observations: &[f64], init_mode: InitMode) 
+    -> (Vec<State>, StartMatrix, TransitionMatrix) {
+
+        let mut running_states: Vec<State> = Vec::new();
+        let mut running_start_matrix: StartMatrix = StartMatrix::empty(baum_welch.num_states as usize);
+        let mut running_transition_matrix: TransitionMatrix = TransitionMatrix::empty(baum_welch.num_states as usize);
+
+        match init_mode {
+            InitMode::GivenInits => {
+                setup_with_given_inits(
+                    baum_welch, observations, &mut running_states,
+                    &mut running_start_matrix, &mut running_transition_matrix);
+            }
+
+            InitMode::Random => {
+                setup_with_random(
+                    baum_welch, observations, &mut running_states,
+                    &mut running_start_matrix, &mut running_transition_matrix);
+            }
+
+            InitMode::Sparse => {
+                setup_with_sparse(
+                    baum_welch, observations, &mut running_states,
+                    &mut running_start_matrix, &mut running_transition_matrix);
+            }
+        }
+
+
+        (running_states, running_start_matrix, running_transition_matrix)
+}
+
+fn setup_with_given_inits(
+    baum_welch: &BaumWelch,
+    observations: &[f64],
+    states: &mut Vec<State>,
+    start_matrix: &mut StartMatrix,
+    transition_matrix: &mut TransitionMatrix) {
+      
+    let observations_max = observations.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let observations_min = observations.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    if let Some(init) = baum_welch.initial_states.as_ref() {
+        *states = init.to_vec();
+    } else {
+        let std = (observations_max - observations_max) / baum_welch.num_states as f64;
+        *states = HMMInstance::generate_sparse_states(baum_welch.num_states, observations_max, observations_min, std).unwrap();
+    }
+
+    if let Some(init) = baum_welch.initial_start_matrix.as_ref() {
+        *start_matrix = init.clone();
+    } else {
+        *start_matrix = StartMatrix::new_random(baum_welch.num_states as usize);
+    }
+
+    if let Some(init) = baum_welch.initial_transition_matrix.as_ref() {
+        *transition_matrix = init.clone();
+    } else {
+        *transition_matrix = TransitionMatrix::new_random(baum_welch.num_states as usize);
+    }
+
+}
+
+fn setup_with_random(
+    baum_welch: &BaumWelch,
+    observations: &[f64],
+    states: &mut Vec<State>,
+    start_matrix: &mut StartMatrix,
+    transition_matrix: &mut TransitionMatrix){
+    
+    let observations_max = observations.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let observations_min = observations.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    *states = HMMInstance::generate_random_states(baum_welch.num_states, Some(observations_max), Some(observations_min), None, None).unwrap();
+     
+    *start_matrix = StartMatrix::new_random(baum_welch.num_states as usize);
+
+    *transition_matrix = TransitionMatrix::new_random(baum_welch.num_states as usize);
+
+}
+
+fn setup_with_sparse(
+    baum_welch: &BaumWelch,
+    observations: &[f64],
+    states: &mut Vec<State>,
+    start_matrix: &mut StartMatrix,
+    transition_matrix: &mut TransitionMatrix){
+    
+    let observations_max = observations.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let observations_min = observations.iter().cloned().fold(f64::INFINITY, f64::min);
+
+    let std = (observations_max - observations_max) / baum_welch.num_states as f64;
+
+    *states = HMMInstance::generate_sparse_states(baum_welch.num_states, observations_max, observations_min, std).unwrap();
+     
+    *start_matrix = StartMatrix::new_random(baum_welch.num_states as usize);
+    
+    *transition_matrix = TransitionMatrix::new_random(baum_welch.num_states as usize);
+}
+
 
 #[derive(Debug)]
 pub enum BaumWelchError {
@@ -295,4 +444,10 @@ pub enum BaumWelchError {
 
     // State collapse
     CollapsedStates {states: Vec<usize>},
+}
+
+pub enum InitMode {
+    GivenInits,
+    Random,
+    Sparse,
 }

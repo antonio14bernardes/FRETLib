@@ -132,6 +132,7 @@ impl<'a> Viterbi<'a> {
                     }   
                 }
 
+                
                 // Update the viterbi and backtrece matrices
                 viterbi_probs[next_state][i] = max_prob;
                 bactrace_mat[next_state][i-1] = best_prev_state;
