@@ -9,6 +9,7 @@ pub struct Viterbi<'a> {
     transition_matrix: Option<&'a TransitionMatrix>,
 
     viterbi_probs: Option<StateMatrix2D<f64>>,
+    scaling_factors: Vec<f64>,
     bactrace_mat: Option<StateMatrix2D<usize>>,
     ml_path: Option<Vec<usize>>
 }
@@ -25,6 +26,7 @@ impl<'a> Viterbi<'a> {
             transition_matrix: Some(transition_matrix),
 
             viterbi_probs: None,
+            scaling_factors: Vec::new(),
             bactrace_mat: None,
             ml_path: None,
         }
@@ -37,6 +39,7 @@ impl<'a> Viterbi<'a> {
             transition_matrix: None,
 
             viterbi_probs: None,
+            scaling_factors: Vec::new(),
             bactrace_mat: None,
             ml_path: None,
         }
@@ -80,10 +83,10 @@ impl<'a> Viterbi<'a> {
         let num_observations = observations.len();
 
         // Create the viterbi algo related matrices from StateMatrix objects
-        let mut viterbi_probs = StateMatrix2D::<f64>::empty((num_states, num_observations));
-        let mut backtrace_mat = StateMatrix2D::<usize>::empty((num_states, num_observations - 1));
+        let viterbi_probs = StateMatrix2D::<f64>::empty((num_states, num_observations));
+        let backtrace_mat = StateMatrix2D::<usize>::empty((num_states, num_observations - 1));
 
-        let mut ml_path = vec![0_usize; num_observations];
+        let ml_path = vec![0_usize; num_observations];
 
         Ok((viterbi_probs, backtrace_mat, ml_path))
     }
@@ -92,6 +95,7 @@ impl<'a> Viterbi<'a> {
         
         // Collect the allocated memory
         let (mut viterbi_probs, mut bactrace_mat, mut ml_path) = self.setup_algo(observations, check_validity)?;
+        self.scaling_factors.reserve(observations.len()); // Allocate memory for the scaling factors
 
         // Unwrap states and matrices
         let states = self.states.unwrap();
@@ -101,6 +105,7 @@ impl<'a> Viterbi<'a> {
         /*********** Viterbi's algorithn ***********/
 
         // Run first step of the Viterbi algo using the start probabilities
+        let mut sum = 0.0;
         for state in states {
             // Calculate the initial Viterbi probability for each state
             let start_prob = start_matrix[state];  // Start probability for the state
@@ -108,12 +113,27 @@ impl<'a> Viterbi<'a> {
         
             // Store the initial Viterbi probability in the viterbi_probs
             viterbi_probs[state][0] = start_prob * emission_prob;
+
+            // Update sum for subsequent normalization
+            sum += viterbi_probs[state][0];
         
             // No need to change backtrace matrix since it is created for num_time_steps - 1 
+
         }
+
+        // Normalize initial step
+        for state in states {
+            viterbi_probs[state][0] /= sum;
+        }
+
+        // Store scaling factor
+        self.scaling_factors.push(sum);
 
         // Run remaining steps of Viterbi using the transition matrices
         for i in 1..observations.len() {
+
+            let mut sum = 0.0;
+
             for next_state in states {
                 let mut max_prob: f64 = 0.;
                 let mut best_prev_state: usize = 0;
@@ -123,8 +143,8 @@ impl<'a> Viterbi<'a> {
                 for previous_state in states {
                     let transition_prob = transition_matrix[(previous_state, next_state)]; // Transition probability for the transition prev_state -> next_state
 
-                    let total_prob = transition_prob * emission_prob * viterbi_probs[previous_state][i-1]; // Total probability until now
-
+                    let total_prob = transition_prob * emission_prob * viterbi_probs[previous_state][i-1]; // Using scaled previous probability
+                    // println!("Prob: {}", total_prob);
                     // If better result, update trackers
                     if total_prob > max_prob {
                         max_prob = total_prob;
@@ -136,8 +156,19 @@ impl<'a> Viterbi<'a> {
                 // Update the viterbi and backtrece matrices
                 viterbi_probs[next_state][i] = max_prob;
                 bactrace_mat[next_state][i-1] = best_prev_state;
+
+                // Update sum for subsequent normalization
+                sum += max_prob;
                 
             }
+
+            // Normalize timestep i
+            for state in states {
+                viterbi_probs[state][i] /= sum;
+            }
+
+            // Store scaling factor
+            self.scaling_factors.push(sum);
         }
     
 
