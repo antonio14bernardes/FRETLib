@@ -30,15 +30,15 @@ fn main() {
         ];
         let real_transition_matrix = TransitionMatrix::new(real_transition_matrix_raw);
 
-        let (sequence_ids, sequence_values) = HMM::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 600);
+        let (sequence_ids, sequence_values) = HMM::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 900);
 
 
         /****** Create slightly off states and matrices ******/
 
 
-        let fake_state1 = State::new(0, 9.0, 1.2).unwrap();
-        let fake_state2 = State::new(1, 23.0, 1.2).unwrap();
-        let fake_state3 = State::new(2, 28.0, 2.7).unwrap();
+        let fake_state1 = State::new(0, 14.8, 1.2).unwrap();
+        let fake_state2 = State::new(1, 15.5, 1.2).unwrap();
+        let fake_state3 = State::new(2, 25.5, 2.7).unwrap();
 
         let fake_states = [fake_state1, fake_state2, fake_state3].to_vec();
 
@@ -59,7 +59,7 @@ fn main() {
         baum.set_initial_start_matrix(fake_start_matrix).unwrap();
         baum.set_initial_transition_matrix(fake_transition_matrix).unwrap();
 
-        let termination_criterium = TerminationCriterium::MaxIterations { max_iterations: 100 };
+        let termination_criterium = TerminationCriterium::MaxIterations { max_iterations: 1000 };
 
         let output_res = baum.run_optimization(&sequence_values, termination_criterium);
 

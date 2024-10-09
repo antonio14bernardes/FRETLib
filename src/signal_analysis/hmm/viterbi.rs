@@ -144,7 +144,7 @@ impl<'a> Viterbi<'a> {
                     let transition_prob = transition_matrix[(previous_state, next_state)]; // Transition probability for the transition prev_state -> next_state
 
                     let total_prob = transition_prob * emission_prob * viterbi_probs[previous_state][i-1]; // Using scaled previous probability
-                    // println!("Prob: {}", total_prob);
+
                     // If better result, update trackers
                     if total_prob > max_prob {
                         max_prob = total_prob;

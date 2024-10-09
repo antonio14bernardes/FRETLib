@@ -13,9 +13,9 @@ pub struct HMMInstance<'a> {
 
     viterbi: Viterbi<'a>,
 
-    alphas: Option<StateMatrix2D<f64>>,  // Matrix with probabilities P(O_1, O_2, O_3, ..., O_t, state_t = Si | trans_mat, start_mat, state_set()
+    alphas: Option<StateMatrix2D<f64>>,  // Matrix with probabilities P(O_1, O_2, O_3, ..., O_t, state_t = Si | trans_mat, start_mat, state_set)
     alphas_scaled: Option<StateMatrix2D<f64>>,
-    betas: Option<StateMatrix2D<f64>>, // Matrix with probabilities P(O_t+1, O_t+2, O_t+3, ..., O_T, state_t = Si | trans_mat, start_mat, state_set()
+    betas: Option<StateMatrix2D<f64>>, // Matrix with probabilities P(O_t+1, O_t+2, O_t+3, ..., O_T | state_t = Si, trans_mat, start_mat, state_set)
     betas_scaled: Option<StateMatrix2D<f64>>,
     scaling_factors: Option<Vec<f64>>,
     gammas: Option<StateMatrix2D<f64>>, // Probability of seeing state i on timestep t given both the previous and following observations and states
@@ -283,12 +283,6 @@ impl<'a> HMMInstance<'a> {
         self.run_betas(observations)?;
         self.run_gammas(observations)?;
         self.run_xis(observations)?;
-
-        for mat in [&self.alphas, &self.betas, &self.gammas] {
-            println!("Matrix: {:?}\n", mat.as_ref().unwrap());
-        }
-
-        println!("Matrix: {:?}\n", &self.xis.as_ref().unwrap());
 
         let mut sum_vec: Vec<f64> = Vec::new();
         for t in 0..observations.len() - 1 {

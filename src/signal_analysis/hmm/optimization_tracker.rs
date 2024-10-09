@@ -110,16 +110,16 @@ impl OptimizationTracker {
 
 #[derive(Debug, Clone)]
 pub enum TerminationCriterium {
-    MaxIterations {max_iterations: u32},
-    OneStepConvergence {epsilon: f64, max_iterations: Option<u32>},
-    OneStepConvergenceAbsolute {epsilon: f64, max_iterations: Option<u32>},
-    PlateauConvergence {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>},
-    PlateauConvergenceAbsolute {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>},
+    MaxIterations {max_iterations: u32}, // Stop once max iterations reached
+    OneStepConvergence {epsilon: f64, max_iterations: Option<u32>}, // If previous relative improvement is below thresh, stop optimization
+    OneStepConvergenceAbsolute {epsilon: f64, max_iterations: Option<u32>}, // If previous absolute improvement is below thresh, stop optimization
+    PlateauConvergence {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>}, // If there is a large enough fitness plateau, stop optimization
+    PlateauConvergenceAbsolute {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>}, // Same but differences are computed in absolute terms
 }
 
 #[derive(Debug)]
 pub enum StateCollapseHandle {
-    Abort,
-    RestartRandom {allowed_trials: u8},
-    RemoveCollapsedState,
+    Abort, // Abort optimization if state collapses 
+    RestartRandom {allowed_trials: u8}, // Restart optimizatiom with new random states
+    RemoveCollapsedState, // Continue optimization, discarding the collapsed state
 }

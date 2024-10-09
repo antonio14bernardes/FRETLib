@@ -202,6 +202,8 @@ impl BaumWelch {
         hmm_instance.run_viterbi(observations)
         .map_err(|error| BaumWelchError::HMMInstanceError { error })?;
 
+        // The below code was used for computing non scaled prob. matrices:
+        
         // hmm_instance.run_all_probability_matrices(observations)
         // .map_err(|error| BaumWelchError::HMMInstanceError { error })?;
     
