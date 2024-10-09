@@ -1,4 +1,4 @@
-mod signal_analysis;
+pub mod signal_analysis;    
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
