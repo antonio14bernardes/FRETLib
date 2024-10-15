@@ -1,6 +1,6 @@
 use super::{baum_welch::BaumWelch, hmm_instance::HMMInstance, optimization_tracker::{StateCollapseHandle, TerminationCriterium}, StartMatrix, State, TransitionMatrix, HMM};
 
-pub fn bayes_information_criterium_binary_search<F>
+pub fn bayes_information_criterion_binary_search<F>
 (test_function: F,  min_n: usize, max_n: usize) -> (usize, f64)
 where
     F: Fn(usize) -> (f64, usize, usize), // log-likelihood, total num parameters, num samples

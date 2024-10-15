@@ -17,7 +17,7 @@ use fret_lib::signal_analysis::hmm::occams_razor::*;
 
 
 fn main() {
-    let out = bayes_information_criterium_binary_search(trial_function, 1, 5);
+    let out = bayes_information_criterion_binary_search(trial_function, 1, 5);
 
     println!("Result: {:?}", out);
 }
