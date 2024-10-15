@@ -19,7 +19,7 @@ pub struct BaumWelch {
     final_start_matrix: Option<StartMatrix>,
     final_transition_matrix: Option<TransitionMatrix>,
 
-    final_observation_prob: Option<f64>,
+    final_log_likelihood: Option<f64>,
 
     state_collapse_handle: StateCollapseHandle,
 }
@@ -38,7 +38,7 @@ impl BaumWelch {
             final_start_matrix: None,
             final_transition_matrix: None,
 
-            final_observation_prob: None,
+            final_log_likelihood: None,
 
             state_collapse_handle: StateCollapseHandle::Abort, // Default to aborting
         }
@@ -214,7 +214,7 @@ impl BaumWelch {
         let viterbi_pred_option = hmm_instance.take_viterbi_prediction();
         let gammas_option = hmm_instance.take_gammas();
         let xis_option = hmm_instance.take_xis();
-        let observations_prob_option = hmm_instance.take_observations_prob();
+        let log_likelihood_option = hmm_instance.take_log_likelihood();
 
         // Kill hmm_instance
         drop(hmm_instance);
@@ -223,7 +223,7 @@ impl BaumWelch {
         let viterbi_pred = viterbi_pred_option.ok_or(BaumWelchError::ViterbiPredictionNotFound)?;
         let gammas = gammas_option.ok_or(BaumWelchError::HMMGammasNotFound)?;
         let xis = xis_option.ok_or(BaumWelchError::HMMXisNotFound)?;
-        let observations_prob = observations_prob_option.ok_or(BaumWelchError::HMMObservationProbNotFound)?;
+        let log_likelihood = log_likelihood_option.ok_or(BaumWelchError::HMMObservationProbNotFound)?;
 
         Self::update_start_matrix(states, &gammas, start_matrix);
         let update_tr_mat_err = Self::update_transition_matrix(states, &xis, &gammas, transition_matrix);
@@ -241,7 +241,7 @@ impl BaumWelch {
 
         if collapsed_states.len() != 0 {return Err(BaumWelchError::CollapsedStates { states: collapsed_states.into_iter().collect() })}
 
-        Ok(observations_prob)
+        Ok(log_likelihood)
     }
 
     pub fn run_optimization(&mut self, observations: &[f64], termination_criterium: TerminationCriterium) -> Result<(&[State], &StartMatrix, &TransitionMatrix), BaumWelchError> {
@@ -265,7 +265,7 @@ impl BaumWelch {
 
             match new_output {
                 Ok(new_eval) => {
-                    self.final_observation_prob = Some(new_eval);
+                    self.final_log_likelihood = Some(new_eval);
                     if tracker.step(new_eval) {break}
                 },
 
@@ -290,7 +290,7 @@ impl BaumWelch {
 
                         StateCollapseHandle::RemoveCollapsedState => {
                             self.num_states -= states.len() as u16;
-
+                            println!("Was here");
                             running_states = remove_from_state_vec(&running_states, &states);
                             running_start_matrix.remove_states(&states);
                             running_transition_matrix.remove_states(&states);
@@ -323,8 +323,8 @@ impl BaumWelch {
         self.final_transition_matrix.take()
     }
 
-    pub fn take_observations_prob(&mut self) -> Option<f64> {
-        self.final_observation_prob.take()
+    pub fn take_log_likelihood(&mut self) -> Option<f64> {
+        self.final_log_likelihood.take()
     }
 }
 
