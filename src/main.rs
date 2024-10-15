@@ -69,7 +69,6 @@ fn main() {
         }
 
 
-
         // For plotting
         let opt_states = baum.take_states().unwrap();
         let opt_start_matrix = baum.take_start_matrix().unwrap();
