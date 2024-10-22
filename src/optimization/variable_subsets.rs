@@ -1,5 +1,6 @@
 use super::multivariate_gaussian::*;
 use super::constraints::*;
+use nalgebra::constraint;
 use nalgebra::{DMatrix, DVector};
 use rand::Rng;
 use rand_distr::uniform::SampleUniform;
@@ -40,6 +41,47 @@ where T: Clone,
         self.population = Some(population);
     }
 
+    pub fn get_indices(&self) -> &[usize] {
+        &self.indices
+    }
+
+    pub fn get_population(&self) -> Option<&Vec<Vec<T>>> {
+        self.population.as_ref()
+    }
+
+    pub fn get_constraint(&self) -> Option<&OptimizationConstraint<T>> {
+        self.constraint.as_ref()
+    }
+
+    pub fn get_covariance_matrix_type(&self) -> Option<&CovMatrixType> {
+        self.cov_mat_type.as_ref()
+    }
+
+    pub fn check_ready(&self) -> bool {
+        self.population.is_some()
+    }
+}
+
+pub fn enforce_constraint_external<T>(population: &Vec<Vec<T>>, constraint: &OptimizationConstraint<T>) -> Vec<Vec<T>>
+where
+    T: Default + Copy + PartialOrd + Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T>,
+{
+    let mut corrected_population: Vec<Vec<T>> = Vec::new();
+    
+    for individual in population {
+        let mut corrected_individual = individual.clone(); 
+        constraint.repair(&mut corrected_individual); // Apply the constraint repair
+        corrected_population.push(corrected_individual); // Add to the corrected population
+    }
+
+    corrected_population
+}
+
+
+impl<T> VariableSubset<T>
+where
+    T: Default + Copy + PartialOrd + Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T>,
+{
     pub fn set_constraint(&mut self, constraint: OptimizationConstraint<T>) -> Result<(), VariableSubsetError> {
         match &constraint {
             OptimizationConstraint::MaxValue { max } => {
@@ -70,28 +112,23 @@ where T: Clone,
         Ok(())
     }
 
+    pub fn enforce_constraint(&mut self) -> Result<(), VariableSubsetError> {
+        let og_population = self.population.as_ref().ok_or(VariableSubsetError::PopulationNotFound)?;
     
+        if let Some(constraint) = self.constraint.as_ref() {
 
-    pub fn get_indices(&self) -> &[usize] {
-        &self.indices
-    }
+            // Correct population according to constraint
+            let corrected_population = enforce_constraint_external(og_population, constraint);
 
-    pub fn get_population(&self) -> Option<&Vec<Vec<T>>> {
-        self.population.as_ref()
-    }
+            // Update the population with the corrected values
+            self.population = Some(corrected_population);
 
-    pub fn get_constraint(&self) -> Option<&OptimizationConstraint<T>> {
-        self.constraint.as_ref()
-    }
-
-    pub fn get_covariance_matrix_type(&self) -> Option<&CovMatrixType> {
-        self.cov_mat_type.as_ref()
-    }
-
-    pub fn check_ready(&self) -> bool {
-        self.population.is_some()
+        }
+    
+        Ok(())
     }
 }
+
 
 impl<T> VariableSubset<T> 
 where
@@ -147,7 +184,7 @@ where
         Ok(())
     }
 
-    // Set the distribution manually using `DVector` and `DMatrix` from nalgebra
+    // Set the distribution manually using DVector and DMatrix from nalgebra
     pub fn set_distribution_manual(&mut self, mean: DVector<f64>, cov: DMatrix<f64>) -> Result<(), MultivariateGaussianError> {
         let distribution = MultivariateGaussian::new(mean, cov)?;
         self.distribution = Some(distribution);
@@ -162,19 +199,29 @@ where
         None
     } 
 
-    // Sample new set of individuals from distribution
-    pub fn sample_individuals(&self, n: usize, rng: &mut impl Rng) -> Result<Vec<Vec<f64>>, VariableSubsetError> {
+    pub fn get_distribution_object(&self) -> Option<&MultivariateGaussian> {
+        self.distribution.as_ref()
+    }
 
-        let mut new_inds: Vec<Vec<f64>> = Vec::with_capacity(n);
+    // Sample new set of individuals from distribution
+    pub fn sample_individuals(&self, n: usize, rng: &mut impl Rng) -> Result<Vec<Vec<T>>, VariableSubsetError> {
+
 
         if let Some(ref dist) = self.distribution {
+            let mut new_inds: Vec<Vec<T>> = Vec::with_capacity(n);
+
             for _ in 0..n {
                 let out_dvec= dist.sample(rng);
 
                 // Convert DVector<f64> to Vec<f64>
-                let new_ind: Vec<f64> = out_dvec.iter().cloned().collect();
+                let new_ind: Vec<T> = out_dvec.iter().map(|a| T::from(*a)).collect();
 
                 new_inds.push(new_ind);
+            }
+    
+            if let Some(constraint) = self.constraint.as_ref() {
+                let corrected_inds = enforce_constraint_external(&new_inds, constraint);
+                new_inds = corrected_inds;
             }
 
             return Ok(new_inds);
@@ -232,6 +279,7 @@ where
 pub enum VariableSubsetError {
     IncompatiblePopulationShape,
     PopulationEmpty,
+    PopulationNotFound,
     MultivariateGaussianError{err: MultivariateGaussianError},
     SubsetsAreNotIndependent,
     SubsetIndicesEmpty,
@@ -242,6 +290,8 @@ pub enum VariableSubsetError {
     InvalidMinMaxVecLen,
     InvalidCovMatrixTypeslen,
     SubsetsNotDefined,
+    SubsetsAlreadyDefined,
+
 }
 
 
@@ -513,5 +563,71 @@ mod tests_subsets {
             panic!("Failed to compute or retrieve distribution.");
         }
     }
-}
 
+    #[test]
+    fn test_enforce_constraint() {
+        let indices = vec![0, 1];
+        let mut subset = VariableSubset::new(&indices);
+
+        // Set a simple population
+        let population = vec![
+            vec![5.0, 7.0],
+            vec![9.0, 2.0],
+            vec![3.0, 8.0],
+        ];
+        subset.set_population(population.clone());
+
+        // Set a constraint to repair individuals such that each value is within the range [1.0, 6.0]
+        let constraint = OptimizationConstraint::MaxMinValue {
+            max: vec![6.0, 6.0],
+            min: vec![1.0, 1.0],
+        };
+        subset.set_constraint(constraint).unwrap();
+
+        // Enforce the constraints
+        let result = subset.enforce_constraint();
+        assert!(result.is_ok(), "Failed to enforce constraints.");
+
+        // Retrieve the corrected population
+        let corrected_population = subset.get_population().unwrap();
+
+        // Check if each value in the corrected population is within the range [1.0, 6.0]
+        for individual in corrected_population {
+            assert!(individual[0] >= 1.0 && individual[0] <= 6.0, "Value out of range for index 0.");
+            assert!(individual[1] >= 1.0 && individual[1] <= 6.0, "Value out of range for index 1.");
+        }
+    }
+
+    #[test]
+    fn test_sample_individuals_with_max_min_constraints() {
+        let indices = vec![0, 1];
+        let mut subset = VariableSubset::new(&indices);
+
+        // Set the MaxMinValue constraints for the subset
+        let constraint = OptimizationConstraint::MaxMinValue {
+            max: vec![4.0, 5.0],
+            min: vec![1.0, 2.0],
+        };
+        subset.set_constraint(constraint).unwrap();
+
+        // Set up a simple population to compute the initial distribution
+        let population = vec![
+            vec![1.5, 2.5],
+            vec![2.5, 3.5],
+            vec![3.5, 4.5],
+        ];
+        subset.set_population(population);
+        subset.compute_distribution().unwrap();
+
+        // Sample a large number of individuals
+        let num_samples = 1000;
+        let mut rng = thread_rng();
+        let sampled_individuals = subset.sample_individuals(num_samples, &mut rng).unwrap();
+
+        // Check if all sampled individuals satisfy the constraints
+        for individual in sampled_individuals {
+            assert!(individual[0] >= 1.0 && individual[0] <= 4.0, "Sampled value out of range for index 0.");
+            assert!(individual[1] >= 2.0 && individual[1] <= 5.0, "Sampled value out of range for index 1.");
+        }
+    }
+}

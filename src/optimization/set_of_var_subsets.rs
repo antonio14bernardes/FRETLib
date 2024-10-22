@@ -1,11 +1,11 @@
-use super::constraints::*;
+use super::constraints::{self, *};
 use super::multivariate_gaussian::CovMatrixType;
 use super::variable_subsets::*;
 use rand::Rng;
 use rand_distr::uniform::SampleUniform;
 use std::collections::HashSet;
 use std::ops::{Add, Sub, Div, Mul};
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{constraint, DMatrix, DVector};
 
 
 
@@ -58,69 +58,27 @@ where T: Copy + Clone + Default + std::fmt::Debug,
     }
 
 
-    pub fn new(indices: Vec<Vec<usize>>, population: Vec<Vec<T>>, constraints_option: Option<Vec<OptimizationConstraint<T>>>) -> Result<Self, VariableSubsetError> {
-        
-        // Get a set of subsets where each subset only has the indices stored
-        let mut set_subsets = Self::new_empty(indices)?;
-
-        // Set the population
-        set_subsets.set_population(population)?;
-        
-        // Set the constraints
-        if let Some(constraints) = constraints_option {
-            set_subsets.set_constraints(constraints)?;
-        }
-      
-
-        Ok(set_subsets)
-    }
-
     pub fn set_population(&mut self, population: Vec<Vec<T>>) -> Result<(), VariableSubsetError> {
         // Check that population isn't empty
         if population.is_empty() || population.iter().any(|p| p.is_empty()) {
             return Err(VariableSubsetError::PopulationEmpty);
         }
-
+    
         // Check that the number of indices matches the number of variables in each individual of the population
         let num_vars = self.get_num_variables();
-        
+    
         if population.iter().any(|ind| ind.len() != num_vars) {
             return Err(VariableSubsetError::IncompatiblePopulationShape);
         }
-
-        // Create the subsets
-        for subset in self.subsets.iter_mut() {
-
-            // Extract values corresponding to the indices from each individual in the population
-            let subset_population: Vec<Vec<T>> = population
-                .iter()
-                .map(|individual| {
-                    subset.get_indices()
-                        .iter()
-                        .map(|&idx| individual[idx])
-                        .collect()
-                })
-                .collect();
-
-            // Create a VariableSubset and store the relevant values
-            subset.set_population(subset_population);
+    
+        // Use the scramble_population function to get the scrambled subsets
+        let scrambled_population = scramble_population(&self.indices, &population);
+    
+        // Set the population for each subset using the scrambled population
+        for (subset, scrambled_subset_population) in self.subsets.iter_mut().zip(scrambled_population) {
+            subset.set_population(scrambled_subset_population);
         }
-
-        Ok(())
-
-
-    }
-
-    pub fn set_constraints(&mut self, constraints: Vec<OptimizationConstraint<T>>) -> Result<(), VariableSubsetError> {
-        // Check if number of constraints equals the number of subsets
-        if constraints.len() != self.indices.len() {
-            return Err(VariableSubsetError::IncompatibleNumberOfConstraints)
-        }
-
-        for (subset, constraint) in self.subsets.iter_mut().zip(constraints) {
-            subset.set_constraint(constraint)?;
-        }
-
+    
         Ok(())
     }
 
@@ -137,15 +95,75 @@ where T: Copy + Clone + Default + std::fmt::Debug,
         *self.indices.iter().map(|subset| subset.iter().max().unwrap()).max().unwrap() + 1
     }
 
+    pub fn get_num_subsets(&self) -> usize {
+        self.subsets.len()
+    }
+
     pub fn get_subsets(&self) -> &Vec<VariableSubset<T>> {&self.subsets}
 
     pub fn get_subsets_mut(&mut self) -> &mut Vec<VariableSubset<T>> {&mut self.subsets}
+
+    pub fn get_constraints(&self) -> Vec<Option<&OptimizationConstraint<T>>> {
+        let mut vec_cosntraints = Vec::new();
+
+        for subset in &self.subsets {
+            vec_cosntraints.push(subset.get_constraint())
+        }
+
+        vec_cosntraints
+    }
 
     pub fn check_ready(&self) -> bool {
         self.subsets.iter().all(|s| s.check_ready())
     }
 
 }
+
+impl<T> SetVarSubsets<T>
+where
+    T: Default + Copy + PartialOrd + Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + std::fmt::Debug,
+{
+    pub fn new(indices: Vec<Vec<usize>>, population: Vec<Vec<T>>, constraints_option: Option<Vec<OptimizationConstraint<T>>>) -> Result<Self, VariableSubsetError> {
+        
+        // Get a set of subsets where each subset only has the indices stored
+        let mut set_subsets = SetVarSubsets::<T>::new_empty(indices)?;
+
+        // Set the population
+        set_subsets.set_population(population)?;
+        
+        // Set the constraints
+        if let Some(constraints) = constraints_option {
+            set_subsets.set_constraints(constraints)?;
+        }
+      
+
+        Ok(set_subsets)
+    }
+
+    pub fn set_constraints(&mut self, constraints: Vec<OptimizationConstraint<T>>) -> Result<(), VariableSubsetError> {
+        // Check if number of constraints equals the number of subsets
+        if constraints.len() != self.indices.len() {
+            return Err(VariableSubsetError::IncompatibleNumberOfConstraints)
+        }
+
+        for (subset, constraint) in self.subsets.iter_mut().zip(constraints) {
+            subset.set_constraint(constraint)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn enforce_constraints(&mut self) -> Result<(), VariableSubsetError> {
+        for subset in self.subsets.iter_mut() {
+            subset.enforce_constraint()?;
+        }
+
+        Ok(())
+    }
+
+}
+
+
 
 impl<T> SetVarSubsets<T> 
 where
@@ -182,8 +200,8 @@ where
         Ok(())
     }
 
-    pub fn sample_individuals(&self, n: usize, rng: &mut impl Rng) -> Result<Vec<Vec<f64>>, VariableSubsetError> {
-        let scrambled_population: Result<Vec<Vec<Vec<f64>>>, VariableSubsetError> = self
+    pub fn sample_individuals(&self, n: usize, rng: &mut impl Rng) -> Result<Vec<Vec<T>>, VariableSubsetError> {
+        let scrambled_population: Result<Vec<Vec<Vec<T>>>, VariableSubsetError> = self
         .subsets
         .iter()
         .map(|subset| subset.sample_individuals(n, rng)) // Sample individuals
@@ -204,7 +222,6 @@ where
         random_range: Option<(T, T)>, // Optional min/max range
     ) -> Result<(), VariableSubsetError> {
         
-        println!("Constraints: {:?}", self.subsets);
         // Initialize all subsets with random population
         for subset in &mut self.subsets {
             subset.initialize_random_population(pop_size, rng, random_range)?;
@@ -215,9 +232,8 @@ where
 
 }
 
-fn unscramble_population<T: Clone + Copy + Default + std::fmt::Debug>(indices: &Vec<Vec<usize>>, population: &Vec<Vec<Vec<T>>>) -> Vec<Vec<T>> {
+pub fn unscramble_population<T: Clone + Copy + Default + std::fmt::Debug>(indices: &Vec<Vec<usize>>, population: &Vec<Vec<Vec<T>>>) -> Vec<Vec<T>> {
 
-    println!("Scrambled population shape ({},{},{})", population.len(), population[0].len(), population[1].len());
     // Find the number of individuals and the total number of variables from indices
     let num_individuals = population[0].len();
     let total_vars = indices.iter().flatten().max().unwrap() + 1;
@@ -239,6 +255,75 @@ fn unscramble_population<T: Clone + Copy + Default + std::fmt::Debug>(indices: &
     }
 
     original_population
+}
+
+pub fn unscramble_means(indices: &Vec<Vec<usize>>, means: &Vec<DVector<f64>>) -> DVector<f64> {
+    // Find the total number of variables from indices
+    let total_vars = indices.iter().flatten().max().unwrap() + 1;
+
+    // Create a new DVector with the total number of variables, initialized to zeros
+    let mut original_mean = DVector::zeros(total_vars);
+
+    // Iterate through each subset and place its values back in the original structure
+    for (subset_idx, subset_indices) in indices.iter().enumerate() {
+        let subset_mean = &means[subset_idx];
+
+        // Iterate over values in the subset
+        for (j, &value) in subset_mean.iter().enumerate() {
+            let original_index = subset_indices[j];
+            original_mean[original_index] = value;
+        }
+    }
+
+    original_mean
+}
+
+pub fn scramble_population<T: Clone + Copy + Default + std::fmt::Debug>(
+    indices: &Vec<Vec<usize>>,
+    original_population: &Vec<Vec<T>>,
+) -> Vec<Vec<Vec<T>>> {
+    // Create a scrambled population structure based on the subset indices
+    let mut scrambled_population: Vec<Vec<Vec<T>>> = indices
+        .iter()
+        .map(|subset_indices| vec![vec![T::default(); subset_indices.len()]; original_population.len()])
+        .collect();
+
+    // Iterate over each subset and extract values from the original structure
+    for (subset_idx, subset_indices) in indices.iter().enumerate() {
+        let subset_population = &mut scrambled_population[subset_idx];
+
+        // Iterate over each individual in the original population
+        for (individual_idx, original_individual) in original_population.iter().enumerate() {
+            for (j, &original_index) in subset_indices.iter().enumerate() {
+                subset_population[individual_idx][j] = original_individual[original_index];
+            }
+        }
+    }
+
+    scrambled_population
+}
+
+pub fn scramble_means(
+    indices: &Vec<Vec<usize>>,
+    original_mean: &DVector<f64>,
+) -> Vec<DVector<f64>> {
+    // Create scrambled means structure based on the subset indices
+    let mut scrambled_means: Vec<DVector<f64>> = indices
+        .iter()
+        .map(|subset_indices| DVector::zeros(subset_indices.len()))
+        .collect();
+
+    // Iterate over each subset and extract values from the original mean
+    for (subset_idx, subset_indices) in indices.iter().enumerate() {
+        let subset_mean = &mut scrambled_means[subset_idx];
+
+        // Iterate over each index in the subset and extract the corresponding value from the original mean
+        for (j, &original_index) in subset_indices.iter().enumerate() {
+            subset_mean[j] = original_mean[original_index];
+        }
+    }
+
+    scrambled_means
 }
 
 
@@ -555,6 +640,213 @@ mod tests_set_var_subsets {
         let wrong_cov_types = vec![CovMatrixType::Full; 4];  // Not enough covariance types
         let result = set_var_subsets.set_covariance_matrix_types(wrong_cov_types);
         assert!(result.is_err(), "Expected an error due to mismatch in cov_types length and subsets length");
+    }
+
+    #[test]
+    fn test_enforce_constraints() {
+        // Define indices for the subsets
+        let indices = vec![
+            vec![0, 1], // First subset contains variables 0 and 1
+            vec![2, 3], // Second subset contains variables 2 and 3
+        ];
+
+        // Create an initial population
+        let population = vec![
+            vec![1.0, 2.0, 3.0, 4.0], // First individual
+            vec![5.0, 6.0, 7.0, 8.0], // Second individual
+        ];
+
+        // Initialize SetVarSubsets with population and no constraints
+        let mut set_var_subsets = SetVarSubsets::<f64>::new(indices, population, None).unwrap();
+
+        // Define constraints for each subset
+        let constraints = vec![
+            OptimizationConstraint::MaxValue { max: vec![2.0, 2.0] },  // Constraint for the first subset
+            OptimizationConstraint::MinValue { min: vec![4.0, 4.0] },  // Constraint for the second subset
+        ];
+
+        // Set the constraints
+        set_var_subsets.set_constraints(constraints).unwrap();
+
+        // Enforce the constraints
+        let result = set_var_subsets.enforce_constraints();
+        assert!(result.is_ok(), "Failed to enforce constraints");
+
+        // Retrieve the modified population after enforcing constraints
+        let enforced_population = set_var_subsets.get_population();
+
+        // Check if constraints are enforced correctly for the first subset (MaxValue)
+        for individual in &enforced_population {
+            assert!(individual[0] <= 2.0, "Value for variable 0 exceeds maximum constraint");
+            assert!(individual[1] <= 2.0, "Value for variable 1 exceeds maximum constraint");
+        }
+
+        // Check if constraints are enforced correctly for the second subset (MinValue)
+        for individual in &enforced_population {
+            assert!(individual[2] >= 4.0, "Value for variable 2 is below minimum constraint");
+            assert!(individual[3] >= 4.0, "Value for variable 3 is below minimum constraint");
+        }
+    }
+
+    #[test]
+    fn test_unscramble_population() {
+        let indices = vec![
+            vec![0, 1],  // First subset corresponds to variables 0 and 1
+            vec![2, 3],  // Second subset corresponds to variables 2 and 3
+        ];
+
+        // Example scrambled population
+        let scrambled_population = vec![
+            vec![ // First subset's population
+                vec![1.0, 2.0], // Individual 1
+                vec![5.0, 6.0], // Individual 2
+            ],
+            vec![ // Second subset's population
+                vec![3.0, 4.0], // Individual 1
+                vec![7.0, 8.0], // Individual 2
+            ],
+        ];
+
+        // Expected unscrambled population
+        let expected_population = vec![
+            vec![1.0, 2.0, 3.0, 4.0], // Individual 1
+            vec![5.0, 6.0, 7.0, 8.0], // Individual 2
+        ];
+
+        // Perform unscrambling
+        let result = unscramble_population(&indices, &scrambled_population);
+
+        // Check if the result matches the expected population
+        assert_eq!(result, expected_population, "Unscrambled population does not match the expected population");
+    }
+
+    #[test]
+    fn test_unscramble_population_with_non_contiguous_indices() {
+        let indices = vec![
+            vec![0, 2],  // First subset corresponds to variables 0 and 2
+            vec![1, 3],  // Second subset corresponds to variables 1 and 3
+        ];
+
+        // Example scrambled population
+        let scrambled_population = vec![
+            vec![
+                vec![1.0, 3.0], // Individual 1
+                vec![5.0, 7.0], // Individual 2
+            ],
+            vec![
+                vec![2.0, 4.0], // Individual 1
+                vec![6.0, 8.0], // Individual 2
+            ],
+        ];
+
+        // Expected unscrambled population
+        let expected_population = vec![
+            vec![1.0, 2.0, 3.0, 4.0], // Individual 1
+            vec![5.0, 6.0, 7.0, 8.0], // Individual 2
+        ];
+
+        // Perform unscrambling
+        let result = unscramble_population(&indices, &scrambled_population);
+
+        // Check if the result matches the expected population
+        assert_eq!(result, expected_population, "Unscrambled population does not match the expected population");
+    }
+
+    #[test]
+    fn test_unscramble_means() {
+        let indices = vec![
+            vec![0, 1],  // First subset corresponds to variables 0 and 1
+            vec![2, 3],  // Second subset corresponds to variables 2 and 3
+        ];
+
+        // Example scrambled means
+        let scrambled_means = vec![
+            DVector::from_vec(vec![1.0, 2.0]), // First subset's mean
+            DVector::from_vec(vec![3.0, 4.0]), // Second subset's mean
+        ];
+
+        // Expected unscrambled mean
+        let expected_mean = DVector::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+
+        // Perform unscrambling
+        let result = unscramble_means(&indices, &scrambled_means);
+
+        // Check if the result matches the expected mean
+        assert_eq!(result, expected_mean, "Unscrambled mean does not match the expected mean");
+    }
+
+    #[test]
+    fn test_unscramble_means_with_non_contiguous_indices() {
+        let indices = vec![
+            vec![0, 2],  // First subset corresponds to variables 0 and 2
+            vec![1, 3],  // Second subset corresponds to variables 1 and 3
+        ];
+
+        // Example scrambled means
+        let scrambled_means = vec![
+            DVector::from_vec(vec![1.0, 3.0]), // First subset's mean
+            DVector::from_vec(vec![2.0, 4.0]), // Second subset's mean
+        ];
+
+        // Expected unscrambled mean
+        let expected_mean = DVector::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+
+        // Perform unscrambling
+        let result = unscramble_means(&indices, &scrambled_means);
+
+        // Check if the result matches the expected mean
+        assert_eq!(result, expected_mean, "Unscrambled mean does not match the expected mean");
+    }
+
+    #[test]
+    fn test_scramble_population_non_contiguous() {
+        // Non-contiguous subset indices
+        let indices = vec![vec![0, 2], vec![1, 3]];
+
+        // Original population with 4 variables
+        let original_population = vec![
+            vec![1.0, 2.0, 3.0, 4.0],  // First individual
+            vec![5.0, 6.0, 7.0, 8.0],  // Second individual
+        ];
+
+        // Expected scrambled population
+        let expected_scrambled_population = vec![
+            vec![vec![1.0, 3.0], vec![5.0, 7.0]],  // Subset 0 (indices [0, 2])
+            vec![vec![2.0, 4.0], vec![6.0, 8.0]],  // Subset 1 (indices [1, 3])
+        ];
+
+        // Perform scrambling
+        let scrambled_population = scramble_population(&indices, &original_population);
+
+        // Check if the scrambled population matches the expected result
+        assert_eq!(
+            scrambled_population, expected_scrambled_population,
+            "Scrambled population does not match expected result"
+        );
+    }
+
+    #[test]
+    fn test_scramble_means_non_contiguous() {
+        // Non-contiguous subset indices
+        let indices = vec![vec![0, 2], vec![1, 3]];
+
+        // Original mean vector with 4 variables
+        let original_mean = DVector::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+
+        // Expected scrambled means
+        let expected_scrambled_means = vec![
+            DVector::from_vec(vec![1.0, 3.0]),  // Subset 0 (indices [0, 2])
+            DVector::from_vec(vec![2.0, 4.0]),  // Subset 1 (indices [1, 3])
+        ];
+
+        // Perform scrambling
+        let scrambled_means = scramble_means(&indices, &original_mean);
+
+        // Check if the scrambled means match the expected result
+        assert_eq!(
+            scrambled_means, expected_scrambled_means,
+            "Scrambled means do not match expected result"
+        );
     }
 }
 

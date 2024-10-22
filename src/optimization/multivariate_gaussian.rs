@@ -7,19 +7,27 @@ pub struct MultivariateGaussian {
     mean: DVector<f64>,     // Mean vector
     cov: DMatrix<f64>,      // Covariance matrix
     cholesky: Cholesky<f64, nalgebra::Dyn>,  // Cholesky decomposition for sampling
+    cholesky_inv: DMatrix<f64>,  // Inverse of the Cholesky mat
 
 }
 
 impl MultivariateGaussian {
-    // Constructor: Create a new multivariate normal distribution with a mean vector and covariance matrix
+    // Create a new multivariate normal distribution with a mean vector and covariance matrix
     pub fn new(mean: DVector<f64>, cov: DMatrix<f64>) -> Result<Self, MultivariateGaussianError> {
         let cholesky = Cholesky::new(cov.clone())
         .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;  // Cholesky decomposition of covariance matrix
+
+        // Compute the inverse of the Cholesky factor
+        let cholesky_inv = cholesky.l().try_inverse()
+            .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+
+
 
         Ok(MultivariateGaussian {
             mean,
             cov,
             cholesky,
+            cholesky_inv
         })
     }
 
@@ -34,10 +42,15 @@ impl MultivariateGaussian {
         let cholesky = Cholesky::new(cov.clone())
             .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
 
+        // Compute the inverse of the Cholesky factor
+        let cholesky_inv = cholesky.l().try_inverse()
+            .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+
         Ok(MultivariateGaussian {
             mean,
             cov,
             cholesky,
+            cholesky_inv,
         })
     }
 
@@ -92,10 +105,20 @@ impl MultivariateGaussian {
         // Try to perform Cholesky decomposition
         match Cholesky::new(cov_matrix.clone()) {
             Some(cholesky) => {
+
+                // Compute the inverse of the Cholesky factor
+                let cholesky_inv = cholesky.l().try_inverse()
+                .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+
+
+                println!("New mean: {:?}", &mean);
+                println!("New cov: {:?}", &cov_matrix);
+
                 Ok(MultivariateGaussian {
                     mean,
                     cov: cov_matrix,
                     cholesky,
+                    cholesky_inv,
                 })
             },
             None => {
@@ -107,10 +130,18 @@ impl MultivariateGaussian {
                 let cholesky = Cholesky::new(cov_matrix.clone())
                     .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
 
+                // Compute the inverse of the Cholesky factor
+                let cholesky_inv = cholesky.l().try_inverse()
+                .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+
+                println!("New mean: {:?}", &mean);
+                println!("New cov: {:?}", &cov_matrix);
+
                 Ok(MultivariateGaussian {
                     mean,
                     cov: cov_matrix,
                     cholesky,
+                    cholesky_inv,
                 })
             }
         }
@@ -134,6 +165,14 @@ impl MultivariateGaussian {
 
     pub fn get_mean_cov(&self) -> (&DVector<f64>, &DMatrix<f64>) {
         (&self.mean, &self.cov)
+    }
+
+    pub fn get_cholesky(&self) -> &Cholesky<f64, nalgebra::Dyn> {
+        &self.cholesky
+    }
+    
+    pub fn get_cholesky_inv(&self) -> &DMatrix<f64> {
+        &self.cholesky_inv
     }
 
     fn flatten_cov(cov: &Vec<Vec<f64>>) -> Vec<f64> {
@@ -308,5 +347,38 @@ mod tests {
         }
 
         println!("Covariance matrix (diagonal):\n{}", cov);
+    }
+
+
+    #[test]
+    fn test_cholesky_inverse() {
+        // Define a simple covariance matrix for testing
+        let cov = DMatrix::from_row_slice(3, 3, &[
+            4.0, 2.0, 0.6,
+            2.0, 5.0, 1.5,
+            0.6, 1.5, 3.0,
+        ]);
+
+        // Define a mean vector
+        let mean = DVector::from_vec(vec![1.0, 2.0, 3.0]);
+
+        // Create a MultivariateGaussian object
+        let gaussian = MultivariateGaussian::new(mean, cov).unwrap();
+
+        // Retrieve the Cholesky decomposition and its inverse
+        let cholesky = gaussian.cholesky.l();
+        let cholesky_inv = &gaussian.cholesky_inv;
+
+        // Compute the product of the Cholesky factor and its inverse
+        let identity_approx = cholesky * cholesky_inv;
+
+        // Check if the result is approximately an identity matrix
+        let identity = DMatrix::identity(3, 3);
+        let tolerance = 1e-6;
+        assert!(
+            (&identity_approx - identity).abs().max() < tolerance,
+            "Cholesky inverse computation is incorrect, result: \n{:?}",
+            identity_approx
+        );
     }
 }
