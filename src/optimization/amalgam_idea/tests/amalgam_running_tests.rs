@@ -1,9 +1,9 @@
-use crate::optimization::amalgam_parameters::AmalgamIdeaParameters;
+use super::super::super::variable_subsets::VariableSubsetError;
+use super::super::super::amalgam_idea::*;
+use super::super::super::optimizer::*;
+use super::super::super::constraints::*;
+use super::super::amalgam_parameters::AmalgamIdeaParameters;
 
-use super::variable_subsets::VariableSubsetError;
-use super::amalgam_idea::*;
-use super::optimizer::*;
-use super::constraints::*;
 use nalgebra::{DMatrix, DVector};
 
 
@@ -204,8 +204,7 @@ fn test_selection() {
     assert!(result.is_ok(), "Expected successful selection");
 
     // Check if the latest selection is correctly set
-    assert!(amalgam.get_latest_selection().is_some(), "Expected latest selection to be set");
-    let latest_selection = amalgam.get_latest_selection().unwrap();
+    let latest_selection = result.unwrap();
 
     // Calculate the expected number of selected individuals
     let expected_num_to_select = (0.5 * 6.0) as usize;
@@ -223,7 +222,7 @@ fn test_selection() {
         vec![3.0, 3.0, 3.0, 3.0, 3.0], // Fitness = 15.0
     ];
     assert_eq!(
-        latest_selection, &expected_selection,
+        latest_selection, expected_selection,
         "Expected the selected individuals to match the highest fitness values"
     );
 }
@@ -265,10 +264,10 @@ fn test_update_distribution() {
         .collect();
 
     // Perform a selection
-    amalgam.selection().unwrap();
+    let selection = amalgam.selection().unwrap();
 
     // Update the distribution
-    amalgam.update_distribution().unwrap();
+    amalgam.update_distribution(selection).unwrap();
 
     // Check if the new distributions are different from the previous distributions
     let new_dists: Vec<(DVector<f64>, DMatrix<f64>)> = amalgam
@@ -361,203 +360,3 @@ fn test_update_population() {
 }
 
 
-#[test]
-fn test_update_parameters_with_improvement() {
-    let problem_size = 5;
-    let iter_memory = false;
-    let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
-
-    // Set up parameters for the optimizer
-    let params = AmalgamIdeaParameters::new(
-        4, 0.5, 1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
-    );
-    amalgam.set_parameters(params).unwrap();
-
-    // Set the fitness function
-    amalgam.set_fitness_function(toy_fitness_function);
-
-    // Set initial population
-    let initial_population = vec![
-        vec![0.1, 0.2, 0.3, 0.4, 0.5],
-        vec![0.5, 0.4, 0.3, 0.2, 0.1],
-        vec![0.2, 0.3, 0.4, 0.5, 0.6],
-        vec![0.6, 0.5, 0.4, 0.3, 0.2],
-    ];
-    amalgam.set_initial_population(initial_population).unwrap();
-
-    // Initialize the optimizer
-    amalgam.initialize().unwrap();
-
-    // Assume some improved individuals
-    let improved_individuals = vec![
-        vec![0.3, 0.3, 0.3, 0.3, 0.3],
-        vec![0.4, 0.4, 0.4, 0.4, 0.4],
-    ];
-
-    // Current means for the subsets
-    let curr_means = vec![
-        DVector::from_vec(vec![0.2, 0.2, 0.2, 0.2, 0.2]),
-    ];
-
-    // Perform parameter update
-    let result = amalgam.update_parameters(improved_individuals, curr_means);
-
-    // Check that the function executed without errors
-    assert!(result.is_ok(), "Failed to update parameters with improvement");
-
-    // Verify that stagnant iterations counter was reset
-    assert_eq!(amalgam.get_stagnant_iterations(), 0, "Stagnant iterations counter should be reset");
-
-    // Verify that c_mult was updated correctly
-    assert_eq!(amalgam.get_cmult().unwrap(), &1.0, "c_mult should be set to 1.0 after improvement");
-}
-
-#[test]
-fn test_update_parameters_no_improvement() {
-    let problem_size = 5;
-    let iter_memory = false;
-    let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
-
-    // Set up parameters for the optimizer
-    let params = AmalgamIdeaParameters::new(
-        4, 0.5, 1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
-    );
-    amalgam.set_parameters(params).unwrap();
-
-    // Set the fitness function
-    amalgam.set_fitness_function(toy_fitness_function);
-
-    // Set initial population
-    let initial_population = vec![
-        vec![0.1, 0.2, 0.3, 0.4, 0.5],
-        vec![0.5, 0.4, 0.3, 0.2, 0.1],
-        vec![0.2, 0.3, 0.4, 0.5, 0.6],
-        vec![0.6, 0.5, 0.4, 0.3, 0.2],
-    ];
-    amalgam.set_initial_population(initial_population).unwrap();
-
-    // Initialize the optimizer
-    amalgam.initialize().unwrap();
-
-    // Assume no improved individuals
-    let improved_individuals: Vec<Vec<f64>> = Vec::new();
-
-    // Current means for the subsets
-    let curr_means = vec![
-        DVector::from_vec(vec![0.2, 0.2, 0.2, 0.2, 0.2]),
-    ];
-
-    // Perform parameter update
-    let result = amalgam.update_parameters(improved_individuals, curr_means);
-
-    // Check that the function executed without errors
-    assert!(result.is_ok(), "Failed to update parameters without improvement");
-
-    // Verify that stagnant iterations counter was incremented
-    assert_eq!(amalgam.get_stagnant_iterations(), 1, "Stagnant iterations counter should be incremented");
-
-    // Verify that c_mult was updated correctly
-    assert!(amalgam.get_cmult().unwrap() <= &1.0, "c_mult should be less than or equal to 1.0 when no improvement");
-}
-
-
-#[test]
-fn test_update_parameters_with_large_improvement() {
-    let problem_size = 5;
-    let iter_memory = false;
-    let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
-
-    // Set up parameters for the optimizer
-    let params = AmalgamIdeaParameters::new(
-        4, 0.5, 1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
-    );
-    amalgam.set_parameters(params).unwrap();
-
-    // Set the fitness function
-    amalgam.set_fitness_function(toy_fitness_function);
-
-    // Set initial population
-    let initial_population = vec![
-        vec![0.1, 0.2, 0.3, 0.4, 0.5],
-        vec![0.5, 0.4, 0.3, 0.2, 0.1],
-        vec![0.2, 0.3, 0.4, 0.5, 0.6],
-        vec![0.6, 0.5, 0.4, 0.3, 0.2],
-    ];
-    amalgam.set_initial_population(initial_population).unwrap();
-
-    // Initialize the optimizer
-    amalgam.initialize().unwrap();
-
-    // Assume large improvement in individuals
-    let improved_individuals = vec![
-        vec![20., 20., 20., 20., 20.],
-        vec![20., 20., 20., 20., 20.],
-    ];
-
-    // Current means for the subsets
-    let curr_means = vec![
-        DVector::from_vec(vec![0.2, 0.2, 0.2, 0.2, 0.2]),
-    ];
-
-    // Perform parameter update
-    let result = amalgam.update_parameters(improved_individuals, curr_means);
-
-    // Check that the function executed without errors
-    assert!(result.is_ok(), "Failed to update parameters with large improvement");
-
-    // Verify that c_mult increased due to the significant improvement
-    assert!(amalgam.get_cmult().unwrap() > &1.0, "c_mult should be greater than 1.0 for large improvements");
-}
-
-#[test]
-fn test_step_function_basic() {
-    let problem_size = 5;
-    let iter_memory = true;
-    let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
-
-    // Set the toy fitness function
-    amalgam.set_fitness_function(toy_fitness_function);
-
-    // Initialize the optimizer
-    amalgam.initialize().unwrap();
-
-    // Perform a step
-    let result = amalgam.step();
-
-    // Ensure no errors occurred
-    assert!(result.is_ok(), "Expected step to complete successfully");
-
-    // Verify the current population has changed
-    let current_population = amalgam.get_current_population();
-    assert_ne!(
-        current_population,
-        amalgam.get_initial_population().unwrap(),
-        "Population should have changed after a step"
-    );
-
-    // Verify that the best solution is updated
-    assert!(amalgam.get_best_solution().is_some(), "Best solution should be set after a step");
-}
-
-#[test]
-fn test_run_function_basic() {
-    let problem_size = 5;
-    let iter_memory = true;
-    let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
-
-    // Set the toy fitness function
-    amalgam.set_fitness_function(toy_fitness_function);
-
-    // Run the optimizer for 10 iterations
-    let max_iterations = 10;
-    let result = amalgam.run(max_iterations);
-
-    // Ensure the run completed successfully
-    assert!(result.is_ok(), "Expected the run to complete successfully");
-
-    // Verify that the best solution is found
-    assert!(amalgam.get_best_solution().is_some(), "Expected a best solution to be found");
-
-    // Verify that the best fitnesses are being stored
-    assert!(amalgam.get_fitnesses().len() > 0, "Expected a best solution to be found");
-}

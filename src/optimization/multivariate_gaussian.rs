@@ -1,5 +1,5 @@
 use nalgebra::{DMatrix, DVector, Cholesky};
-use rand::{distributions, Rng};
+use rand::{distributions, Rng, thread_rng};
 use rand_distr::{Normal, Distribution};
 
 #[derive(Debug)]
@@ -16,7 +16,7 @@ impl MultivariateGaussian {
     pub fn new(mean: DVector<f64>, cov: DMatrix<f64>) -> Result<Self, MultivariateGaussianError> {
         let cholesky = Cholesky::new(cov.clone())
         .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;  // Cholesky decomposition of covariance matrix
-
+        // println!("Got cholesky");
         // Compute the inverse of the Cholesky factor
         let cholesky_inv = cholesky.l().try_inverse()
             .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
@@ -111,8 +111,8 @@ impl MultivariateGaussian {
                 .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
 
 
-                println!("New mean: {:?}", &mean);
-                println!("New cov: {:?}", &cov_matrix);
+                // println!("New mean: {:?}", &mean);
+                // println!("New cov: {:?}", &cov_matrix);
 
                 Ok(MultivariateGaussian {
                     mean,
@@ -126,16 +126,21 @@ impl MultivariateGaussian {
                 let jitter = 1e-6; // You can adjust this value as needed
                 Self::add_jitter_to_cov_matrix(&mut cov_matrix, jitter);
 
+                
                 // Retry Cholesky decomposition with the modified matrix
+                // let cholesky = Cholesky::new(cov_matrix.clone())
+                //     .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+
                 let cholesky = Cholesky::new(cov_matrix.clone())
-                    .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+                .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+    
 
                 // Compute the inverse of the Cholesky factor
                 let cholesky_inv = cholesky.l().try_inverse()
                 .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
 
-                println!("New mean: {:?}", &mean);
-                println!("New cov: {:?}", &cov_matrix);
+                // println!("New mean: {:?}", &mean);
+                // println!("New cov: {:?}", &cov_matrix);
 
                 Ok(MultivariateGaussian {
                     mean,
@@ -275,7 +280,7 @@ mod tests {
         ];
 
         let unflat_cov = MultivariateGaussian::unflatten_cov(&flat_cov).unwrap();
-        println!("{:?}",unflat_cov);
+    
         assert_eq!(unflat_cov, expected_cov, "Unflattened covariance matrix is incorrect");
     }
 
@@ -380,5 +385,61 @@ mod tests {
             "Cholesky inverse computation is incorrect, result: \n{:?}",
             identity_approx
         );
+    }
+
+    #[test]
+    fn test_distribution_sampling() {
+        let cov = DMatrix::from_row_slice(3, 3, &[
+            4.0, 2.0, 0.6,
+            2.0, 5.0, 1.5,
+            0.6, 1.5, 3.0,
+        ]);
+
+        // Define a mean vector
+        let mean = DVector::from_vec(vec![1.0, 2.0, 3.0]);
+
+        // Create a MultivariateGaussian object
+        let gaussian = MultivariateGaussian::new(mean.clone(), cov.clone()).unwrap();
+
+        // Get the random number generator
+        let mut rng = thread_rng();
+        
+        // Get new sampled
+        let n = 10000;
+        let mut sampled = Vec::new();
+        for _ in 0..n {
+            let new_sample: Vec<f64> = gaussian.sample(&mut rng).iter().map(|a| *a).collect();
+            sampled.push(new_sample);
+        }
+
+        let mut as_refs: Vec<&[f64]> = sampled.iter().map(|vec| vec.as_slice()).collect();
+
+        // Compute distribution based on the samples
+        let new_gaussian = MultivariateGaussian::from_observations(&as_refs, &CovMatrixType::Full).unwrap();
+
+        let (sampled_mean, sampled_cov) = new_gaussian.get_mean_cov();
+
+        // Define a tolerance for mean and covariance comparison
+        let tolerance = 1e-1;
+
+        // Check that the empirical mean is close to the specified mean
+        for (i, &value) in sampled_mean.iter().enumerate() {
+            assert!(
+                (value - mean[i]).abs() < tolerance,
+                "Empirical mean at index {} is incorrect. Expected: {}, Got: {}",
+                i, mean[i], value
+            );
+        }
+
+        // Check that the empirical covariance is close to the specified covariance
+        for i in 0..cov.nrows() {
+            for j in 0..cov.ncols() {
+                assert!(
+                    (sampled_cov[(i, j)] - cov[(i, j)]).abs() < tolerance,
+                    "Empirical covariance at index ({}, {}) is incorrect. Expected: {}, Got: {}",
+                    i, j, cov[(i, j)], sampled_cov[(i, j)]
+                );
+            }
+        }
     }
 }

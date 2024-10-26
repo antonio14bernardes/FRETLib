@@ -1,9 +1,9 @@
-use crate::optimization::amalgam_parameters::AmalgamIdeaParameters;
-
-use super::variable_subsets::VariableSubsetError;
-use super::amalgam_idea::*;
-use super::optimizer::*;
-use super::constraints::*;
+use super::super::super::variable_subsets::VariableSubsetError;
+use super::super::super::amalgam_idea::*;
+use super::super::super::optimizer::*;
+use super::super::super::constraints::*;
+use super::super::AmalgamIdea;
+use super::super::amalgam_parameters::AmalgamIdeaParameters;
 
 #[test]
 fn test_evaluate_with_valid_fitness_function() {

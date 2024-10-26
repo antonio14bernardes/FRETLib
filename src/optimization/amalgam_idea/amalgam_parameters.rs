@@ -1,4 +1,4 @@
-use super::multivariate_gaussian::CovMatrixType;
+use super::super::multivariate_gaussian::CovMatrixType;
 
 #[derive(Debug, Clone)]
 pub struct AmalgamIdeaParameters {
@@ -43,14 +43,14 @@ impl AmalgamIdeaParameters {
 
     pub fn new_auto(prob_size: usize, cov_mat_type: &CovMatrixType, factorized: bool, memory: bool) -> Self {
 
-        let tau = 3.5; // Independent of everything else
+        let tau = 0.35; // Independent of everything else
         let gamma_shift = 2.0; // Independent of everything else
 
         // If subset indices only has one entry, then the optimal subset division hasnt been performed
         // As such, check if cov_mat_type is Full or Diagonal and compute parameters accordingly
         // Also, check if there is memory - if we're using baseline Amalgam or iAmalgam
 
-        let mut alphas_cov = [0.0f64; 3];
+        let mut alphas_cov = [0.0_f64; 3];
         let mut alphas_shift = [0.0_f64; 3];
         let alphas_population_size: [f64; 3];
 
