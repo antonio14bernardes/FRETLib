@@ -20,7 +20,7 @@ pub struct HMMInstance<'a> {
     scaling_factors: Option<Vec<f64>>,
     gammas: Option<StateMatrix2D<f64>>, // Probability of seeing state i on timestep t given both the previous and following observations and states
     xis: Option<StateMatrix3D<f64>>, // Probability of seeing transition i -> j on timestep t given everything we know 
-    observations_prob: Option<f64>, // P(Observations | States, Start Matrix, Transition Matrix)
+    log_likelihood: Option<f64>, // P(Observations | States, Start Matrix, Transition Matrix)
 }
 
 impl<'a> HMMInstance<'a> {
@@ -48,7 +48,7 @@ impl<'a> HMMInstance<'a> {
 
             
         
-            observations_prob: None,
+            log_likelihood: None,
         }
     }
     
@@ -57,7 +57,7 @@ impl<'a> HMMInstance<'a> {
 
         Self { states: None, start_matrix: None, transition_matrix: None, viterbi,
         alphas: None, alphas_scaled: None, betas: None, betas_scaled: None, scaling_factors: None,
-        gammas: None, xis: None, observations_prob: None }
+        gammas: None, xis: None, log_likelihood: None }
     }
 
     pub fn reset(&mut self) {
@@ -214,7 +214,7 @@ impl<'a> HMMInstance<'a> {
         for state in self.states.unwrap() {
             observations_prob += self.alphas.as_ref().unwrap()[state][observations.len()-1]
         }
-        self.observations_prob = Some(observations_prob);
+        self.log_likelihood = Some(observations_prob.ln());
 
         Ok(())
     }
@@ -318,12 +318,16 @@ impl<'a> HMMInstance<'a> {
 
         self.scaling_factors = Some(scaling_factors);
         
-        let mut observations_prob: f64 = 1.0;
-        for factor in self.scaling_factors.as_ref().unwrap() {
-            observations_prob *= factor;
-        }
-        
-        self.observations_prob = Some(observations_prob);
+        // Compute the log-likelihood by summing the logs of the scaling factors
+        let log_likelihood: f64 = self
+        .scaling_factors
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|factor| factor.ln()) // Take the log of each scaling factor
+        .sum(); // Sum the logs of the scaling factors
+
+        self.log_likelihood = Some(log_likelihood);
 
         Ok(())
     }
@@ -430,8 +434,8 @@ impl<'a> HMMInstance<'a> {
         } else { return None }
     }
 
-    pub fn get_observations_prob(&self) -> Option<&f64> {
-        self.observations_prob.as_ref()
+    pub fn get_log_likelihood(&self) -> Option<&f64> {
+        self.log_likelihood.as_ref()
     }
 
     pub fn take_viterbi_prediction(&mut self) -> Option<Vec<usize>> {
@@ -454,8 +458,8 @@ impl<'a> HMMInstance<'a> {
         self.xis.take()
     }
 
-    pub fn take_observations_prob(&mut self) -> Option<f64> {
-        self.observations_prob.take()
+    pub fn take_log_likelihood(&mut self) -> Option<f64> {
+        self.log_likelihood.take()
     }
 
     pub fn generate_random_states(

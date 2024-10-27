@@ -65,6 +65,16 @@ impl TransitionMatrix {
         }
     }
 
+    // Generate a transition matrix with all equal probabilities
+    pub fn new_balanced(num_states: usize) -> Self {
+        let value = 1.0 / (num_states as f64);
+        let matrix = vec![vec![value; num_states]; num_states];
+
+        Self {
+            matrix: StateMatrix2D::new(matrix)
+        }
+    }
+
     // Create an empty transition matrix
     pub fn empty(size: usize) -> Self {
         Self {
@@ -224,6 +234,15 @@ impl StartMatrix {
         raw_matrix.push(total);
 
         Self { matrix: raw_matrix }
+    }
+
+    // Create a new start matrix with all equal start probabilities
+    pub fn new_balanced(num_states: usize) -> Self {
+
+        let value = 1.0 / (num_states as f64);
+        let matrix = vec![value; num_states];
+
+        Self { matrix }
     }
 
     // Create an empty start matrix
