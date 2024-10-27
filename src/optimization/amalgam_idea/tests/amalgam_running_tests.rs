@@ -131,7 +131,7 @@ fn test_initialize_with_only_predefined_parameters() {
 
     // Define custom parameters
     let custom_parameters = AmalgamIdeaParameters::new(
-        50, 0.5, 1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
+        50, 0.5, 1.1, 0.9, 1e-4, 0.1, 0.2, 0.3, 2.0, 25,
     );
     amalgam.set_parameters(custom_parameters).unwrap();
 
@@ -181,7 +181,7 @@ fn test_selection() {
     let custom_parameters = AmalgamIdeaParameters::new(
         6, // population size
         0.5, // tau
-        1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
+        1.1, 0.9, 0.1, 1e-4, 0.2, 0.3, 2.0, 25,
     );
     amalgam.set_parameters(custom_parameters).unwrap();
 
@@ -244,7 +244,7 @@ fn test_update_distribution() {
 
     // Define custom parameters with memory enabled
     let custom_parameters = AmalgamIdeaParameters::new(
-        50, 0.5, 1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
+        50, 0.5, 1.1, 0.9, 1e-4, 0.1, 0.2, 0.3, 2.0, 25,
     );
     amalgam.set_parameters(custom_parameters).unwrap();
 
@@ -313,7 +313,7 @@ fn test_update_population() {
 
     // Define custom parameters with a population size of 50
     let custom_parameters = AmalgamIdeaParameters::new(
-        50, 0.5, 1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
+        50, 0.5, 1.1, 0.9, 1e-4, 0.1, 0.2, 0.3, 2.0, 25,
     );
     amalgam.set_parameters(custom_parameters).unwrap();
 

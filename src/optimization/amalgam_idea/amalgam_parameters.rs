@@ -11,6 +11,7 @@ pub struct AmalgamIdeaParameters {
     // c_mult parameters
     pub c_mult_inc: f64, // Factor to increase c_mult
     pub c_mult_dec: f64, // Factor to decrease c_mult 
+    pub c_mult_min: f64, // If c_mult < c_mult_min stop optimization
 
     // Memory parameters
     pub eta_cov: f64, // Memory in updating the cov matrix
@@ -31,6 +32,7 @@ impl AmalgamIdeaParameters {
     tau: f64,
     c_mult_inc: f64, 
     c_mult_dec: f64,
+    c_mult_min: f64,
     eta_cov: f64,
     eta_shift: f64,
     alpha_shift: f64,
@@ -38,13 +40,15 @@ impl AmalgamIdeaParameters {
     stagnant_iterations_threshold: usize,
     ) -> Self {
 
-        Self{ population_size, tau, c_mult_inc, c_mult_dec, eta_cov, eta_shift, alpha_shift, gamma_shift, stagnant_iterations_threshold }
+        Self{ population_size, tau, c_mult_inc, c_mult_dec, c_mult_min, eta_cov, eta_shift, alpha_shift, gamma_shift, stagnant_iterations_threshold }
     }
 
     pub fn new_auto(prob_size: usize, cov_mat_type: &CovMatrixType, factorized: bool, memory: bool) -> Self {
 
         let tau = 0.35; // Independent of everything else
         let gamma_shift = 2.0; // Independent of everything else
+        
+        let c_mult_min = 1e-4; // Independent of everything else. 
 
         // If subset indices only has one entry, then the optimal subset division hasnt been performed
         // As such, check if cov_mat_type is Full or Diagonal and compute parameters accordingly
@@ -123,6 +127,7 @@ impl AmalgamIdeaParameters {
             tau,
             c_mult_inc,
             c_mult_dec,
+            c_mult_min,
             eta_cov,
             eta_shift,
             alpha_shift,

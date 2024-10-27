@@ -15,20 +15,22 @@ use plotters::prelude::*;
 use rand_distr::num_traits::Pow;
 
 fn fit_fn(individual: &[f64]) -> f64 {
-    let center = [10.0, 1.0, 300.0, 145.0, 654.0, 1042.0, 333.333, 234.0,583.2, 1.0];
+    let center = [13.0, 1.0, 300.0, 145.0, 654.0, 1042.0, 333.333, 234.0,583.2, 1.0];
     let dist: f64 = individual.iter().zip(&center).map(|(v, c)| (c - v).pow(2)).sum();
     -dist
 }
 
 fn main() {
-    let problem_size = 10
-    ;
+    let problem_size = 10;
     let iter_memory = true;
+
+    let dependency_subsets = (0..problem_size).map(|i| vec![i as usize]).collect();
 
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
     amalgam.set_fitness_function(fit_fn);
+    amalgam.set_dependency_subsets(dependency_subsets).unwrap();
 
-    let res = amalgam.run(10000).unwrap();
+    let res = amalgam.run(100000).unwrap();
 
     let best_solution = amalgam.get_best_solution().unwrap().clone().0;
     println!("result: {:?}", best_solution);

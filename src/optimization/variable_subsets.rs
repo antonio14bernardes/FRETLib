@@ -169,6 +169,9 @@ where
         let cov_type = self.cov_mat_type.as_ref().unwrap_or(&CovMatrixType::Full); // Default to Full cov matrix
 
         // Compute the multivariate Gaussian distribution based on these observations
+        // let distribution = MultivariateGaussian::from_observations(&values_slices, cov_type)
+        // .map_err(|e| VariableSubsetError::MultivariateGaussianError { err: e })?;
+
         let distribution = MultivariateGaussian::from_observations(&values_slices, cov_type)
         .map_err(|e| VariableSubsetError::MultivariateGaussianError { err: e })?;
 

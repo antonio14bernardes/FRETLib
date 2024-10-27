@@ -2,17 +2,17 @@ use nalgebra::{DVector, DMatrix};
 use rand::{thread_rng, Rng};
 
 
-use super::super::optimizer::{Optimizer, OptimizerError};
+use super::super::optimizer::{Optimizer, OptimizationError};
 use super::super::set_of_var_subsets::*;
 use super::super::variable_subsets::*;
-use super::super::optimizer::select_top_n;
+use super::super::tools::select_top_n;
 
 
-use super::AmalgamIdea;
+use super::{AmalgamIdea, AmalgamIdeaError};
 
 
 impl<'a> AmalgamIdea<'a> {
-    pub fn selection(&mut self) -> Result<Vec<Vec<f64>>, OptimizerError> {
+    pub fn selection(&mut self) -> Result<Vec<Vec<f64>>, AmalgamIdeaError> {
         // Check if initialization has been done:
         let _ = self.check_initialization()?;
 
@@ -27,13 +27,13 @@ impl<'a> AmalgamIdea<'a> {
         Ok(selection)
     }
 
-    pub fn update_distribution(&mut self, latest_selection: Vec<Vec<f64>>) -> Result<(Vec<DVector<f64>>, Vec<DMatrix<f64>>), OptimizerError> {
+    pub fn update_distribution(&mut self, latest_selection: Vec<Vec<f64>>) -> Result<(Vec<DVector<f64>>, Vec<DMatrix<f64>>), AmalgamIdeaError> {
 
         // Check if initialized
         let _ = self.check_initialization()?;
 
         // Check if selection has been performed and retrieve latest selection
-        // let latest_selection = self.latest_selection.as_ref().ok_or(OptimizerError::SelectionNotPerformed)?;
+        // let latest_selection = self.latest_selection.as_ref().ok_or(AmalgamIdeaError::SelectionNotPerformed)?;
 
 
         ////// Update distribution per subset
@@ -48,7 +48,7 @@ impl<'a> AmalgamIdea<'a> {
 
             for subset in subsets_vec.iter() {
                 
-                let (prev_mean_ref, prev_cov_ref) = subset.get_distribution().ok_or(OptimizerError::InitializationNotPerformed)?;
+                let (prev_mean_ref, prev_cov_ref) = subset.get_distribution().ok_or(AmalgamIdeaError::InitializationNotPerformed)?;
                 let (prev_mean, prev_cov) = (prev_mean_ref.clone(), prev_cov_ref.clone());
                 prev_means.push(prev_mean);
                 prev_covs.push(prev_cov);
@@ -56,10 +56,12 @@ impl<'a> AmalgamIdea<'a> {
 
             // Update population and distribution based on the selected individuals
             let _ = subsets.set_population(latest_selection.clone())
-            .map_err(|err| OptimizerError::VariableSubsetError { err })?;
+            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
 
-            let _ = subsets.compute_distributions().
-            map_err(|err| OptimizerError::VariableSubsetError { err })?;
+            // let _ = subsets.compute_distributions().
+            // map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
+            let _ = subsets.compute_distributions()
+            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
 
         }
 
@@ -81,7 +83,7 @@ impl<'a> AmalgamIdea<'a> {
         //     subset.set_distribution_manual(new_means[i].clone(), new_covs[i].clone())
         //     .map_err
         //     (
-        //         |e| OptimizerError::VariableSubsetError
+        //         |e| AmalgamIdeaError::VariableSubsetError
         //         { 
         //             err: VariableSubsetError::MultivariateGaussianError { err: e }
         //         }
@@ -93,7 +95,7 @@ impl<'a> AmalgamIdea<'a> {
             subset.set_distribution_manual(new_means[i].clone(), new_covs[i].clone())
             .map_err
             (
-                |e| OptimizerError::VariableSubsetError
+                |e| AmalgamIdeaError::VariableSubsetError
                 { 
                     err: VariableSubsetError::MultivariateGaussianError { err: e }
                 }
@@ -105,7 +107,7 @@ impl<'a> AmalgamIdea<'a> {
         Ok((new_means, new_covs))
     }
 
-    pub fn update_population(&mut self)  -> Result<Vec<Vec<f64>>, OptimizerError> {
+    pub fn update_population(&mut self)  -> Result<Vec<Vec<f64>>, AmalgamIdeaError> {
         let _ = self.check_initialization()?;
 
         // Get the current best solution and other parameters
@@ -136,7 +138,7 @@ impl<'a> AmalgamIdea<'a> {
         // Sample the remaining individuals
         let sampled = subsets
             .sample_individuals(num_to_sample, &mut rng)
-            .map_err(|err| OptimizerError::VariableSubsetError { err })?;
+            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
 
         // Perform shifting
         let sampled_with_shifted = self.perform_shifting(sampled, &mut rng)?;
@@ -187,7 +189,7 @@ impl<'a> AmalgamIdea<'a> {
         improved_individuals: Vec<Vec<f64>>,
         curr_means: Vec<DVector<f64>>
         ) 
-        -> Result<(), OptimizerError> {
+        -> Result<(), AmalgamIdeaError> {
 
         
         let _ = self.check_initialization()?;
@@ -234,7 +236,7 @@ impl<'a> AmalgamIdea<'a> {
                 let mean_diff = &means_diff[i];
 
                 // Get the inverse of the cholesky factor
-                let subset_dist = subset.get_distribution_object().ok_or(OptimizerError::InitializationNotPerformed)?;
+                let subset_dist = subset.get_distribution_object().ok_or(AmalgamIdeaError::InitializationNotPerformed)?;
                 let cholesky_inv = subset_dist.get_cholesky_inv();
 
                 // Get the diff back in the standard gaussian space
@@ -267,9 +269,9 @@ impl<'a> AmalgamIdea<'a> {
         Ok(())
     }
 
-    pub fn get_updated_means(&self) -> Result<Vec<DVector<f64>>, OptimizerError>{
+    pub fn get_updated_means(&self) -> Result<Vec<DVector<f64>>, AmalgamIdeaError>{
 
-        let subsets = self.subsets.as_ref().ok_or(OptimizerError::VariableSubsetsNotDefined)?;
+        let subsets = self.subsets.as_ref().ok_or(AmalgamIdeaError::VariableSubsetsNotDefined)?;
         let subsets_vec = subsets.get_subsets();
 
         let mut new_means = Vec::new();
@@ -278,7 +280,7 @@ impl<'a> AmalgamIdea<'a> {
         for subset in subsets_vec.iter() {
             // Get the provisional distribution parameters
             let (new_mean_ref, _provisional_cov_ref) = 
-            subset.get_distribution().ok_or(OptimizerError::InitializationNotPerformed)?;
+            subset.get_distribution().ok_or(AmalgamIdeaError::InitializationNotPerformed)?;
         
             new_means.push(new_mean_ref.clone());
             
@@ -287,11 +289,11 @@ impl<'a> AmalgamIdea<'a> {
         Ok(new_means)
     }
 
-    pub fn get_updated_mean_shifts(&mut self, prev_means: &Vec<DVector<f64>>) -> Result<(), OptimizerError>{
+    pub fn get_updated_mean_shifts(&mut self, prev_means: &Vec<DVector<f64>>) -> Result<(), AmalgamIdeaError>{
 
         let mut new_mean_shifts = Vec::new();
 
-        let subsets = self.subsets.as_ref().ok_or(OptimizerError::VariableSubsetsNotDefined)?;
+        let subsets = self.subsets.as_ref().ok_or(AmalgamIdeaError::VariableSubsetsNotDefined)?;
         let subsets_vec = subsets.get_subsets();
 
         // Update the distribution
@@ -301,7 +303,7 @@ impl<'a> AmalgamIdea<'a> {
             let prev_mean = &prev_means[i];
             let prev_mean_shift = &self.current_mean_shifts[i];
             let (new_mean, _new_cov_ref) = 
-            subset.get_distribution().ok_or(OptimizerError::InitializationNotPerformed)?;
+            subset.get_distribution().ok_or(AmalgamIdeaError::InitializationNotPerformed)?;
 
             // Compute the provisional mean shit
             let provisional_shift = new_mean - prev_mean;
@@ -319,7 +321,7 @@ impl<'a> AmalgamIdea<'a> {
         Ok(())
     }
 
-    pub fn get_updated_covs(&mut self, prev_dists: &Vec<DMatrix<f64>>) -> Result<Vec<DMatrix<f64>>, OptimizerError> {
+    pub fn get_updated_covs(&mut self, prev_dists: &Vec<DMatrix<f64>>) -> Result<Vec<DMatrix<f64>>, AmalgamIdeaError> {
         
         let subsets = self.subsets.as_mut().unwrap();
         let subsets_vec = subsets.get_subsets_mut();
@@ -331,7 +333,7 @@ impl<'a> AmalgamIdea<'a> {
 
             // Get the provisional distribution parameters
             let (_provisional_mean_ref, provisional_cov_ref) = 
-            subset.get_distribution().ok_or(OptimizerError::InitializationNotPerformed)?;
+            subset.get_distribution().ok_or(AmalgamIdeaError::InitializationNotPerformed)?;
 
             let provisional_cov = provisional_cov_ref.clone();
 
@@ -341,7 +343,7 @@ impl<'a> AmalgamIdea<'a> {
 
             // Compute new cov matrix
             let eta_cov = self.parameters.as_ref().unwrap().eta_cov;
-            let c_mult = self.c_mult.as_ref().ok_or(OptimizerError::InitializationNotPerformed)?;
+            let c_mult = self.c_mult.as_ref().ok_or(AmalgamIdeaError::InitializationNotPerformed)?;
 
             let new_cov_pre_mult = (1.0 - &eta_cov) * prev_cov + eta_cov * provisional_cov;
 
@@ -358,17 +360,17 @@ impl<'a> AmalgamIdea<'a> {
         &self,
         sampled: Vec<Vec<f64>>,
         rng: &mut impl Rng
-    ) -> Result<Vec<Vec<f64>>, OptimizerError> {
+    ) -> Result<Vec<Vec<f64>>, AmalgamIdeaError> {
 
         let params = self
             .parameters
             .as_ref()
-            .ok_or(OptimizerError::ParametersNoSet)?;
+            .ok_or(AmalgamIdeaError::ParametersNoSet)?;
 
         let subsets = self
             .subsets
             .as_ref()
-            .ok_or(OptimizerError::VariableSubsetsNotDefined)?;
+            .ok_or(AmalgamIdeaError::VariableSubsetsNotDefined)?;
 
         // Compute number of individuals to shift
         let num_sampled = sampled.len();
@@ -389,7 +391,7 @@ impl<'a> AmalgamIdea<'a> {
             let ind_dvec = DVector::<f64>::from_vec(individual.clone());
             let mean_shift = unscramble_means(subsets.get_subset_indices(), &self.current_mean_shifts);
             let gamma = params.gamma_shift;
-            let c_mult = self.c_mult.as_ref().ok_or(OptimizerError::InitializationNotPerformed)?;
+            let c_mult = self.c_mult.as_ref().ok_or(AmalgamIdeaError::InitializationNotPerformed)?;
 
             let shifted_ind_dvec = ind_dvec + c_mult * gamma * mean_shift;
             let shifted_ind: Vec<f64> = shifted_ind_dvec.iter().copied().collect();

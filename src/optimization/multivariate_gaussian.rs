@@ -6,7 +6,7 @@ use rand_distr::{Normal, Distribution};
 pub struct MultivariateGaussian {
     mean: DVector<f64>,     // Mean vector
     cov: DMatrix<f64>,      // Covariance matrix
-    cholesky: Cholesky<f64, nalgebra::Dyn>,  // Cholesky decomposition for sampling
+    cholesky: DMatrix<f64>,  // Cholesky decomposition for sampling (Lower triangular)
     cholesky_inv: DMatrix<f64>,  // Inverse of the Cholesky mat
 
 }
@@ -14,14 +14,7 @@ pub struct MultivariateGaussian {
 impl MultivariateGaussian {
     // Create a new multivariate normal distribution with a mean vector and covariance matrix
     pub fn new(mean: DVector<f64>, cov: DMatrix<f64>) -> Result<Self, MultivariateGaussianError> {
-        let cholesky = Cholesky::new(cov.clone())
-        .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;  // Cholesky decomposition of covariance matrix
-        // println!("Got cholesky");
-        // Compute the inverse of the Cholesky factor
-        let cholesky_inv = cholesky.l().try_inverse()
-            .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
-
-
+        let [cholesky, cholesky_inv] = get_cholesky_and_inv_stable(&mut cov.clone())?;
 
         Ok(MultivariateGaussian {
             mean,
@@ -37,20 +30,15 @@ impl MultivariateGaussian {
         let cov_vec = Self::unflatten_cov(&flat_cov)?;
 
         let n = cov_vec.len();
-        let cov = DMatrix::from_fn(n, n, |i, j| cov_vec[i][j]);
+        let mut cov = DMatrix::from_fn(n, n, |i, j| cov_vec[i][j]);
 
-        let cholesky = Cholesky::new(cov.clone())
-            .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
-
-        // Compute the inverse of the Cholesky factor
-        let cholesky_inv = cholesky.l().try_inverse()
-            .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+        let [cholesky, cholesky_inv] = get_cholesky_and_inv_stable(&mut cov)?;
 
         Ok(MultivariateGaussian {
             mean,
             cov,
             cholesky,
-            cholesky_inv,
+            cholesky_inv
         })
     }
 
@@ -79,77 +67,38 @@ impl MultivariateGaussian {
         let mean = DVector::from_vec(mean);
 
         // Compute the covariance matrix
-    let mut cov_matrix = DMatrix::zeros(num_dimensions, num_dimensions);
-    
-    match cov_type {
-        CovMatrixType::Full => {
-            // Compute the full covariance matrix
-            for observation in observations {
-                let diff = DVector::from_vec(observation.to_vec().clone()) - &mean;
-                cov_matrix += &diff * diff.transpose();
+        let mut cov_matrix = DMatrix::zeros(num_dimensions, num_dimensions);
+        
+        match cov_type {
+            CovMatrixType::Full => {
+                // Compute the full covariance matrix
+                for observation in observations {
+                    let diff = DVector::from_vec(observation.to_vec().clone()) - &mean;
+                    cov_matrix += &diff * diff.transpose();
+                }
             }
-        }
-        CovMatrixType::Diagonal => {
-            // Compute only the diagonal elements of the covariance matrix
-            for observation in observations {
-                let diff = DVector::from_vec(observation.to_vec().clone()) - &mean;
-                for i in 0..num_dimensions {
-                    cov_matrix[(i, i)] += diff[i] * diff[i];  // Only update the diagonal elements
+            CovMatrixType::Diagonal => {
+                // Compute only the diagonal elements of the covariance matrix
+                for observation in observations {
+                    let diff = DVector::from_vec(observation.to_vec().clone()) - &mean;
+                    for i in 0..num_dimensions {
+                        cov_matrix[(i, i)] += diff[i] * diff[i];  // Only update the diagonal elements
+                    }
                 }
             }
         }
-    }
     
-    cov_matrix /= num_observations as f64;
+        cov_matrix /= num_observations as f64;
 
-        // Try to perform Cholesky decomposition
-        match Cholesky::new(cov_matrix.clone()) {
-            Some(cholesky) => {
+        let [cholesky, cholesky_inv] = get_cholesky_and_inv_stable(&mut cov_matrix)?;
 
-                // Compute the inverse of the Cholesky factor
-                let cholesky_inv = cholesky.l().try_inverse()
-                .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+        Ok(MultivariateGaussian {
+            mean,
+            cov: cov_matrix,
+            cholesky,
+            cholesky_inv
+        })
 
-
-                // println!("New mean: {:?}", &mean);
-                // println!("New cov: {:?}", &cov_matrix);
-
-                Ok(MultivariateGaussian {
-                    mean,
-                    cov: cov_matrix,
-                    cholesky,
-                    cholesky_inv,
-                })
-            },
-            None => {
-                // If Cholesky fails, add jitter and try again
-                let jitter = 1e-6; // You can adjust this value as needed
-                Self::add_jitter_to_cov_matrix(&mut cov_matrix, jitter);
-
-                
-                // Retry Cholesky decomposition with the modified matrix
-                // let cholesky = Cholesky::new(cov_matrix.clone())
-                //     .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
-
-                let cholesky = Cholesky::new(cov_matrix.clone())
-                .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
-    
-
-                // Compute the inverse of the Cholesky factor
-                let cholesky_inv = cholesky.l().try_inverse()
-                .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
-
-                // println!("New mean: {:?}", &mean);
-                // println!("New cov: {:?}", &cov_matrix);
-
-                Ok(MultivariateGaussian {
-                    mean,
-                    cov: cov_matrix,
-                    cholesky,
-                    cholesky_inv,
-                })
-            }
-        }
     }
 
     // Sample from the multivariate normal distribution using Cholesky decomp
@@ -162,17 +111,29 @@ impl MultivariateGaussian {
         let z: DVector<f64> = DVector::from_fn(self.mean.len(), |_, _| normal.sample(rng));
 
         // Transform using the Cholesky factor
-        let transformed_z = self.cholesky.l() * z;
+        let transformed_z = &self.cholesky * z;
 
         // Add the mean to the result
         self.mean.clone() + transformed_z
+    }
+
+    pub fn sample_n(&self, n: usize, rng: &mut impl Rng) -> DMatrix<f64> {
+        let dimension = self.mean.len();
+        let mut samples = DMatrix::zeros(dimension, n);
+    
+        for i in 0..n {
+            let sample = self.sample(rng);
+            samples.set_column(i, &sample);
+        }
+    
+        samples
     }
 
     pub fn get_mean_cov(&self) -> (&DVector<f64>, &DMatrix<f64>) {
         (&self.mean, &self.cov)
     }
 
-    pub fn get_cholesky(&self) -> &Cholesky<f64, nalgebra::Dyn> {
+    pub fn get_cholesky(&self) -> &DMatrix<f64> {
         &self.cholesky
     }
     
@@ -225,14 +186,7 @@ impl MultivariateGaussian {
         }
     
         Ok(unflat_cov)
-    }
-
-    // Helper function to add jitter to the diagonal of a covariance matrix
-    fn add_jitter_to_cov_matrix(cov: &mut DMatrix<f64>, jitter: f64) {
-        for i in 0..cov.nrows() {
-            cov[(i, i)] += jitter;
-        }
-    }
+    }    
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -246,6 +200,102 @@ pub enum MultivariateGaussianError {
     InvalidCovMatrix,
     InvalidFlatCovMatrix,
     EmptyObservationSet,
+}
+
+fn add_jitter_to_cov_matrix(cov: &mut DMatrix<f64>, jitter: f64) {
+    for i in 0..cov.nrows() {
+        cov[(i, i)] += jitter;
+    }
+}
+
+fn scale_matrix(matrix: &DMatrix<f64>) -> (DMatrix<f64>, f64) {
+    // Compute a scale factor based on the norm of the covariance matrix
+    let scale_factor = matrix.norm();
+    
+    // Scale the covariance matrix
+    let scaled_matrix = matrix / scale_factor;
+
+    (scaled_matrix, scale_factor)
+}
+
+fn rescale_matrix(matrix: &DMatrix<f64>, scaling_factor: f64) -> DMatrix<f64> {
+    matrix * scaling_factor
+}
+
+fn rescale_cholesky(cholesky: &DMatrix<f64>, cov_scale: f64) -> DMatrix<f64> {
+    // Extract the lower triangular matrix `L`
+    let mut rescaled_l = cholesky.clone();
+    
+    // Scale Lower triangular by the square root of the scaling factor
+    rescaled_l *= cov_scale.sqrt();
+    
+    rescaled_l
+
+}
+
+fn get_cholesky_stable(cov: &mut DMatrix<f64>) -> Result<DMatrix<f64>, MultivariateGaussianError> {
+    let (scaled_cov, scaling_factor) = scale_matrix(cov);
+    
+    match Cholesky::new(scaled_cov.clone()) {
+        Some(cholesky) => {
+
+            // Get the scaled version of the cholesky lower triangular matrix
+            let scaled_cholesky = cholesky.l();
+
+            // Rescale to the original scale
+            return Ok(rescale_cholesky(&scaled_cholesky, scaling_factor));
+            
+        },
+        None => {
+            // If Cholesky fails, add jitter and try again
+            let jitter = 1e-6;
+            add_jitter_to_cov_matrix(cov, jitter); 
+            let (scaled_cov_with_jitter, scaling_factor_jitter) = scale_matrix(cov);
+
+            let scaled_cholesky = Cholesky::new(scaled_cov_with_jitter.clone())
+            .ok_or(MultivariateGaussianError::InvalidCovMatrix)?.l();
+
+            // Rescale to the original scale
+            return Ok(rescale_cholesky(&scaled_cholesky, scaling_factor));
+        }
+    }
+}
+
+fn get_cholesky_and_inv_stable(cov: &mut DMatrix<f64>) -> Result<[DMatrix<f64>;2], MultivariateGaussianError> {
+    // Try to perform Cholesky decomposition
+    let cholesky = get_cholesky_stable(cov)?;
+
+    // Get scaled colesky to then get the inverse in a stable way
+    let (scaled_cholesky, scaling_factor) = scale_matrix(&cholesky);
+
+    // Try to get the inverse
+    match scaled_cholesky.clone().try_inverse() {
+        Some(scaled_inv) => {
+
+            // Rescale to the original scale
+            let cholesky_inv = rescale_matrix(&scaled_inv, 1.0/scaling_factor);
+
+            return Ok([cholesky, cholesky_inv]);
+        },
+        None => {
+            // If Cholesky fails, add jitter and try again
+            let jitter = 1e-6;
+            add_jitter_to_cov_matrix(cov, jitter);
+
+            // Since we changed the cov matrix, let's obtain the cholesky factor again for the new matrix
+            let cholesky = get_cholesky_stable(cov)?;
+            let (scaled_cholesky, scaling_factor) = scale_matrix(&cholesky);
+
+            // Compute the inverse of the Cholesky factor
+            let scaled_inv = scaled_cholesky.clone().try_inverse()
+            .ok_or(MultivariateGaussianError::InvalidCovMatrix)?;
+
+            // Rescale to the original scale
+            let cholesky_inv = rescale_cholesky(&scaled_inv, 1.0/scaling_factor);
+            
+            return Ok([cholesky, cholesky_inv]);
+        }
+    }         
 }
 
 
@@ -371,7 +421,7 @@ mod tests {
         let gaussian = MultivariateGaussian::new(mean, cov).unwrap();
 
         // Retrieve the Cholesky decomposition and its inverse
-        let cholesky = gaussian.cholesky.l();
+        let cholesky = gaussian.cholesky;
         let cholesky_inv = &gaussian.cholesky_inv;
 
         // Compute the product of the Cholesky factor and its inverse
@@ -441,5 +491,40 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_get_cholesky_stable() {
+        // Define a numerically stable covariance matrix
+        let mut cov = DMatrix::from_row_slice(3, 3, &[
+            4.0, 1.2, 0.5,
+            1.2, 3.0, 0.8,
+            0.5, 0.8, 2.0,
+        ]);
+
+        // Get Cholesky and inverse using `get_cholesky_stable`
+        let [cholesky_mat, cholesky_inv_mat] = get_cholesky_and_inv_stable(&mut cov)
+            .expect("Cholesky decomposition should succeed for a stable matrix");
+
+        // Obtain expected Cholesky and inverse using nalgebra's Cholesky
+        let cholesky = Cholesky::new(cov.clone()).expect("Cholesky decomposition should succeed");
+        let expected_cholesky = cholesky.l();
+        let expected_cholesky_inv = expected_cholesky.clone().try_inverse()
+            .expect("Inverse of Cholesky factor should exist");
+
+        // Set a tolerance for floating-point comparisons
+        let tolerance = 1e-6;
+
+        // Check if `cholesky_mat` is close to `expected_cholesky`
+        assert!(
+            (cholesky_mat - expected_cholesky).abs().max() < tolerance,
+            "Computed Cholesky factor does not match expected result."
+        );
+
+        // Check if `cholesky_inv_mat` is close to `expected_cholesky_inv`
+        assert!(
+            (cholesky_inv_mat - expected_cholesky_inv).abs().max() < tolerance,
+            "Computed inverse of Cholesky factor does not match expected result."
+        );
     }
 }

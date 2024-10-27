@@ -2,42 +2,44 @@ use nalgebra::DVector;
 use rand::thread_rng;
 
 
-use super::AmalgamIdea;
+use super::{AmalgamIdea, AmalgamIdeaError};
 
-use super::super::optimizer::{Optimizer, OptimizerError};
+use super::super::optimizer::Optimizer;
 use super::super::set_of_var_subsets::*;
 use super::amalgam_parameters::*;
 use super::super::multivariate_gaussian::CovMatrixType;
-use super::super::optimizer::select_top_n;
+use super::super::tools::select_top_n;
 
 
 impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
 
+    type Error = AmalgamIdeaError;
+
     // Evaluate the fitness of a single solution
-    fn evaluate(&self, solution: &Vec<f64>) -> Result<f64, OptimizerError> {
+    fn evaluate(&self, solution: &Vec<f64>) -> Result<f64, AmalgamIdeaError> {
         let fitness_function = self
             .fitness_function
             .as_ref()
-            .ok_or(OptimizerError::FitnessFunctionNotSet)?;
+            .ok_or(AmalgamIdeaError::FitnessFunctionNotSet)?;
         
         Ok(fitness_function(&solution))
 
     }
 
     // Initialize the population
-    fn initialize(&mut self) -> Result<(), OptimizerError>{
+    fn initialize(&mut self) -> Result<(), AmalgamIdeaError>{
 
         // Check if fitness function has been set
-        let _ = self.fitness_function.as_ref().ok_or(OptimizerError::FitnessFunctionNotSet)?;
+        let _ = self.fitness_function.as_ref().ok_or(AmalgamIdeaError::FitnessFunctionNotSet)?;
 
         // Check if subsets have been initialized. If not, assume no subset division.
         if self.subsets.is_none() {
             let mut subsets = 
             SetVarSubsets::<f64>::new_empty(vec![(0..self.problem_size).collect()])
-            .map_err(|err| OptimizerError::SubsetError {err})?;
+            .map_err(|err| AmalgamIdeaError::SubsetError {err})?;
 
             if let Some(population) = &self.initial_population {
-                subsets.set_population(population.clone()).map_err(|err| OptimizerError::VariableSubsetError { err })?;
+                subsets.set_population(population.clone()).map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
             }
 
             self.subsets = Some(subsets);
@@ -74,7 +76,7 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
             let mut rng = thread_rng(); // Use this function for random number generation
 
             subsets.initialize_random_population(pop_size, &mut rng, None)
-            .map_err(|err| OptimizerError::VariableSubsetError { err })?;
+            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
 
             self.initial_population = Some(subsets.get_population());
         }
@@ -82,7 +84,7 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
 
         // Initialize the distributions in the subsets
         self.subsets.as_mut().unwrap().compute_distributions()
-        .map_err(|err| OptimizerError::VariableSubsetError { err })?;
+        .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
 
 
         // Set the current pop and fitness fields
@@ -108,7 +110,7 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
     }
 
     // Execute a single optimization step
-    fn step(&mut self) -> Result<(), OptimizerError> {
+    fn step(&mut self) -> Result<(), AmalgamIdeaError> {
         // Perform selection
         let selection = self.selection()?;
 
@@ -125,15 +127,15 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
     }
 
     // Run the optimization process
-    fn run(&mut self, max_iterations: usize) -> Result<(), OptimizerError>  {
-        
-        let min_cmult = 1e-2;
+    fn run(&mut self, max_iterations: usize) -> Result<(), AmalgamIdeaError>  {
         
         self.initialize();
 
-        let mut iters = 0_usize;
+        let c_mult_min = self.parameters.as_ref().unwrap().c_mult_min;
 
-        while iters < max_iterations &&  self.c_mult.unwrap() > min_cmult {
+        let mut iters = 0_usize;
+        while iters < max_iterations &&  self.c_mult.unwrap() > c_mult_min{
+            
             self.step()?;
 
             let new_fit = self.best_solution.as_ref().unwrap().1;

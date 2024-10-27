@@ -2,7 +2,7 @@ use nalgebra::DVector;
 use std::fmt;
 
 use super::super::constraints::OptimizationConstraint;
-use super::super::optimizer::{Optimizer, OptimizerError};
+use super::super::optimizer::{Optimizer, OptimizationError};
 use super::super::set_of_var_subsets::*;
 use super::super::variable_subsets::*;
 use super::amalgam_parameters::*;
@@ -57,11 +57,11 @@ impl<'a> AmalgamIdea<'a> {
         }
     } 
 
-    pub fn set_parameters(&mut self, parameters: AmalgamIdeaParameters) -> Result<(), OptimizerError> {
+    pub fn set_parameters(&mut self, parameters: AmalgamIdeaParameters) -> Result<(), AmalgamIdeaError> {
         // Check population size compatibility with parameters
         if let Some(population) = self.initial_population.as_ref() {
             if parameters.population_size != population.len() {
-                return Err(OptimizerError::PopulationIncompatibleWithParameters);
+                return Err(AmalgamIdeaError::PopulationIncompatibleWithParameters);
             }
         }
 
@@ -76,32 +76,32 @@ impl<'a> AmalgamIdea<'a> {
         self.fitness_function = Some(Box::new(fitness_function));
     }
 
-    pub fn set_initial_population(&mut self, initial_population: Vec<Vec<f64>>) -> Result<(), OptimizerError> {
+    pub fn set_initial_population(&mut self, initial_population: Vec<Vec<f64>>) -> Result<(), AmalgamIdeaError> {
 
         if initial_population.iter().any(|ind| ind.len() != self.problem_size) {
-            return Err(OptimizerError::PopulationIncompatibleWithProblemSize)
+            return Err(AmalgamIdeaError::PopulationIncompatibleWithProblemSize)
         }
 
         if let Some(params) = self.parameters.as_ref() {
             if params.population_size != initial_population.len() {
-                return Err(OptimizerError::PopulationIncompatibleWithParameters);
+                return Err(AmalgamIdeaError::PopulationIncompatibleWithParameters);
             }
         }
         
 
         if let Some(subsets) = self.subsets.as_mut() {
             subsets.set_population(initial_population.clone())
-            .map_err(|err| OptimizerError::VariableSubsetError { err })?;
+            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
         }
         self.initial_population = Some(initial_population);
 
         Ok(())
     }
 
-    pub fn set_dependency_subsets(&mut self, dependency_subsets: Vec<Vec<usize>>) -> Result<(), OptimizerError> {
+    pub fn set_dependency_subsets(&mut self, dependency_subsets: Vec<Vec<usize>>) -> Result<(), AmalgamIdeaError> {
 
         if self.subsets.is_some() {
-            return Err(OptimizerError::SubsetError { err: VariableSubsetError::SubsetsAlreadyDefined });
+            return Err(AmalgamIdeaError::SubsetError { err: VariableSubsetError::SubsetsAlreadyDefined });
         }
 
         // Check if max index in the subsets is compatible with the defined problem size
@@ -109,23 +109,23 @@ impl<'a> AmalgamIdea<'a> {
         .iter()
         .flat_map(|s| s.iter().cloned())
         .max()
-        .ok_or(OptimizerError::SubsetsIncompatibleWithProblemSize)?;
+        .ok_or(AmalgamIdeaError::SubsetsIncompatibleWithProblemSize)?;
 
         if max_idx != self.problem_size - 1 {
-            return Err(OptimizerError::SubsetsIncompatibleWithProblemSize);
+            return Err(AmalgamIdeaError::SubsetsIncompatibleWithProblemSize);
         }
 
 
         if let Some(ref init_pop) = self.initial_population {
 
             let set = SetVarSubsets::new(dependency_subsets, init_pop.clone(), None)
-            .map_err(|err| OptimizerError::VariableSubsetError { err })?;
+            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
             self.subsets = Some(set);
 
         } else {
 
             let set = SetVarSubsets::new_empty(dependency_subsets)
-            .map_err(|err| OptimizerError::VariableSubsetError { err })?;
+            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
             self.subsets = Some(set);
 
         }
@@ -133,9 +133,9 @@ impl<'a> AmalgamIdea<'a> {
         Ok(())
     }
 
-    pub fn set_constraints(&mut self, constraints: Vec<OptimizationConstraint<f64>>) -> Result<(), OptimizerError> {
+    pub fn set_constraints(&mut self, constraints: Vec<OptimizationConstraint<f64>>) -> Result<(), AmalgamIdeaError> {
         if let Some(subsets) = self.subsets.as_mut() {
-            subsets.set_constraints(constraints).map_err(|err| OptimizerError::VariableSubsetError { err })?;
+            subsets.set_constraints(constraints).map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
         
         } else {
 
@@ -146,10 +146,10 @@ impl<'a> AmalgamIdea<'a> {
 
                 let subsets = self.subsets.as_mut().unwrap();
 
-                subsets.set_constraints(constraints).map_err(|err| OptimizerError::VariableSubsetError { err })?;
+                subsets.set_constraints(constraints).map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
 
             } else {
-                return Err(OptimizerError::VariableSubsetsNotDefined);
+                return Err(AmalgamIdeaError::VariableSubsetsNotDefined);
             }
         }
 
@@ -199,24 +199,24 @@ impl<'a> AmalgamIdea<'a> {
         &self.best_fitnesses
     }
 
-    pub fn check_initialization(&self) -> Result<(), OptimizerError> {
+    pub fn check_initialization(&self) -> Result<(), AmalgamIdeaError> {
         if self.parameters.is_none() || 
         self.initial_population.is_none() || 
         self.subsets.is_none() ||
         self.current_population.is_empty() ||
         self.best_solution.is_none() {
-            return Err(OptimizerError::InitializationNotPerformed);
+            return Err(AmalgamIdeaError::InitializationNotPerformed);
         }
 
         Ok(())
     }
 
-    pub fn evaluate_population(&self) -> Result<Vec<f64>, OptimizerError> {
+    pub fn evaluate_population(&self) -> Result<Vec<f64>, AmalgamIdeaError> {
         let population = &self.current_population;
         let evals: Vec<f64> = population
             .iter()
             .map(|individual| self.evaluate(individual))
-            .collect::<Result<Vec<f64>, OptimizerError>>()?;
+            .collect::<Result<Vec<f64>, AmalgamIdeaError>>()?;
 
         Ok(evals)
     }
@@ -241,8 +241,28 @@ impl<'a> fmt::Debug for AmalgamIdea<'a> {
     }
 }
 
-
+#[derive(Debug)]
 pub enum AmalgamIdeaError {
-    IncompatibleParameterSet
+    InitialValuesNotSet,
+    FitnessFunctionNotSet,
+    VariableSubsetsNotDefined,
+    VariableSubsetError{err: VariableSubsetError},
+
+    SubsetsIncompatibleWithProblemSize,
+    PopulationIncompatibleWithProblemSize,
+    PopulationIncompatibleWithParameters,
+
+    OptimizorTraitMethodNotImplemented,
+
+    SubsetError{err: VariableSubsetError},
+    IncompatibleParameterSet,
+    ParametersNoSet,
+
+    InitializationNotPerformed,
+    SelectionNotPerformed,
+
+
 }
+
+impl OptimizationError for AmalgamIdeaError {}
 

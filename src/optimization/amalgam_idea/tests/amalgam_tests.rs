@@ -44,7 +44,7 @@ fn test_evaluate_without_setting_fitness_function() {
 
     // Check that the result is an error and matches the expected error type
     assert!(
-        matches!(result, Err(OptimizerError::FitnessFunctionNotSet)),
+        matches!(result, Err(AmalgamIdeaError::FitnessFunctionNotSet)),
         "Expected FitnessFunctionNotSet error, but got: {:?}",
         result
     );
@@ -63,7 +63,7 @@ fn test_set_parameters_with_subsets_single_parameter() {
 
     // Create a single AmalgamIdeaParameter
     let param = AmalgamIdeaParameters::new(
-        50, 0.5, 1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
+        50, 0.5, 1.1, 0.9, 1e-4, 0.1, 0.2, 0.3, 2.0, 25,
     );
 
     // Attempt to set parameters with a single item in the vector
@@ -120,7 +120,7 @@ fn test_set_initial_population_with_incorrect_sizes() {
 
     // Verify that the result is an error of type PopulationIncompatibleWithProblemSize
     assert!(
-        matches!(result, Err(OptimizerError::PopulationIncompatibleWithProblemSize)),
+        matches!(result, Err(AmalgamIdeaError::PopulationIncompatibleWithProblemSize)),
         "Expected PopulationIncompatibleWithProblemSize error, but got: {:?}",
         result
     );
@@ -205,7 +205,7 @@ fn test_set_dependency_subsets_already_defined() {
 
     // Verify that the result is an error because subsets are already defined
     assert!(
-        matches!(result, Err(OptimizerError::SubsetError { err: VariableSubsetError::SubsetsAlreadyDefined })),
+        matches!(result, Err(AmalgamIdeaError::SubsetError { err: VariableSubsetError::SubsetsAlreadyDefined })),
         "Expected SubsetsAlreadyDefined error, but got: {:?}",
         result
     );
@@ -249,7 +249,7 @@ fn test_set_dependency_subsets_with_invalid_data() {
 
     // Verify that the result is an error because of incompatible subset indices
     assert!(
-        matches!(result, Err(OptimizerError::SubsetsIncompatibleWithProblemSize)),
+        matches!(result, Err(AmalgamIdeaError::SubsetsIncompatibleWithProblemSize)),
         "Expected SubsetsIncompatibleWithProblemSize error, but got: {:?}",
         result
     );
@@ -377,7 +377,7 @@ fn test_set_constraints_without_subsets_multiple_constraints() {
 
     // Verify that the result is an error due to subsets not being defined
     assert!(
-        matches!(result, Err(OptimizerError::VariableSubsetsNotDefined)),
+        matches!(result, Err(AmalgamIdeaError::VariableSubsetsNotDefined)),
         "Expected VariableSubsetsNotDefined error, but got: {:?}",
         result
     );
@@ -392,7 +392,7 @@ fn test_set_population_with_incorrect_number_of_individuals_after_parameters_set
 
     // Set the parameters with a population_size of 3
     let param = AmalgamIdeaParameters::new(
-        3, 0.5, 1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
+        3, 0.5, 1.1, 0.9, 1e-4, 0.1, 0.2, 0.3, 2.0, 25,
     );
     amalgam.set_parameters(param).unwrap();
 
@@ -407,7 +407,7 @@ fn test_set_population_with_incorrect_number_of_individuals_after_parameters_set
 
     // Verify that the result is an error indicating a mismatch in population size
     assert!(
-        matches!(result, Err(OptimizerError::PopulationIncompatibleWithParameters)),
+        matches!(result, Err(AmalgamIdeaError::PopulationIncompatibleWithParameters)),
         "Expected PopulationIncompatibleWithParameters error, but got: {:?}",
         result
     );
@@ -431,13 +431,13 @@ fn test_set_parameters_with_incorrect_population_size_after_population_set() {
 
     // Set the parameters with a different population_size (e.g., 3 instead of 4)
     let param = AmalgamIdeaParameters::new(
-        3, 0.5, 1.1, 0.9, 0.1, 0.2, 0.3, 2.0, 25,
+        3, 0.5, 1.1, 0.9, 1e-4, 0.1, 0.2, 0.3, 2.0, 25,
     );
     let result = amalgam.set_parameters(param);
 
     // Verify that the result is an error indicating a mismatch in population size
     assert!(
-        matches!(result, Err(OptimizerError::PopulationIncompatibleWithParameters)),
+        matches!(result, Err(AmalgamIdeaError::PopulationIncompatibleWithParameters)),
         "Expected PopulationIncompatibleWithParameters error, but got: {:?}",
         result
     );
