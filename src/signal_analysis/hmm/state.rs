@@ -128,6 +128,10 @@ pub fn remove_from_state_vec<T: IDTarget>(states: &Vec<State>, to_remove: &[T]) 
     let mut new = states.clone();
     new.retain(|state| !remove_set.contains(&state.get_id()));
 
+    for (i, state) in new.iter_mut().enumerate() {
+        state.id = i;
+    }
+
     new
 }
 
