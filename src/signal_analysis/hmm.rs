@@ -21,6 +21,8 @@ pub mod hmm_instance;
 pub mod baum_welch;
 pub mod optimization_tracker;
 pub mod probability_matrices;
+pub mod occams_razor;
+pub mod kmeans;
 use state::*;
 use hmm_matrices::*; 
 

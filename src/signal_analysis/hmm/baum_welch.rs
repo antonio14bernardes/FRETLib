@@ -199,8 +199,10 @@ impl BaumWelch {
         
         let mut hmm_instance = HMMInstance::new(states, start_matrix, transition_matrix);
         
+        // println!("Before first");
         hmm_instance.run_viterbi(observations)
         .map_err(|error| BaumWelchError::HMMInstanceError { error })?;
+        // println!("First is fine");
 
         // The below code was used for computing non scaled prob. matrices:
         
@@ -209,6 +211,7 @@ impl BaumWelch {
     
         hmm_instance.run_all_probability_matrices_with_scaled(observations)
         .map_err(|error| BaumWelchError::HMMInstanceError { error })?;
+        // println!("Second is fine");
 
         // Take ownership of the relevant date from hmm_instance
         let viterbi_pred_option = hmm_instance.take_viterbi_prediction();
@@ -244,6 +247,7 @@ impl BaumWelch {
         Ok(log_likelihood)
     }
 
+
     pub fn run_optimization(&mut self, observations: &[f64], termination_criterium: TerminationCriterium) -> Result<(&[State], &StartMatrix, &TransitionMatrix), BaumWelchError> {
 
         let mut tracker = OptimizationTracker::new(termination_criterium);
@@ -254,9 +258,9 @@ impl BaumWelch {
 
         let (mut running_states, mut running_start_matrix, mut running_transition_matrix) =
         setup_baum_welch(&self, observations, InitMode::GivenInits);
-
+        
         loop {
-
+            
             let new_output = Self::run_step(
                 &mut running_states,
                 &mut running_start_matrix,
@@ -290,7 +294,6 @@ impl BaumWelch {
 
                         StateCollapseHandle::RemoveCollapsedState => {
                             self.num_states -= states.len() as u16;
-                            println!("Was here");
                             running_states = remove_from_state_vec(&running_states, &states);
                             running_start_matrix.remove_states(&states);
                             running_transition_matrix.remove_states(&states);
