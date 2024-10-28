@@ -242,21 +242,57 @@ where
     ) -> Result<(), VariableSubsetError> {
 
         let mut population: Vec<Vec<T>> = Vec::with_capacity(pop_size);
-
-        let (min_val, max_val) = if let Some((min, max)) = random_range {
-            if min > max {return Err(VariableSubsetError::InvalidMinMaxValues)}
-            (min, max)
-        } else {
-            // Default random range, (0.0, 1.0) for f64
-            (T::default(), T::default() + T::from(1.0))
-        };
-
         let num_values = self.indices.len();
+
+        
+        let mut min_values = vec![T::default(); num_values];
+        let mut max_values = vec![T::default() + T::from(1.0); num_values];
+
+        if let Some(constraint) = self.constraint.as_ref(){
+            match constraint {
+                OptimizationConstraint::MaxValue { max } => {
+                    let constraint_max = if max.len() == 1 {vec![max[0]; num_values]} else {max.clone()};
+                    // Override max_values element only if it's higher than the constraint's max
+                    for i in 0..num_values {
+                        max_values[i] = constraint_max[i];
+                    }
+                    
+                }
+                OptimizationConstraint::MinValue { min } => {
+                    let constraint_min = if min.len() == 1 {vec![min[0]; num_values]} else {min.clone()};
+                    // Override min_values element only if it's higher than the constraint's min
+                    for i in 0..num_values {
+                        min_values[i] = constraint_min[i];
+                    }
+                }
+                OptimizationConstraint::MaxMinValue { max, min } => {
+                    // Override both max_values and min_values element if they are out of bounds
+                    let constraint_max = if max.len() == 1 {vec![max[0]; num_values]} else {max.clone()};
+                    let constraint_min = if min.len() == 1 {vec![min[0]; num_values]} else {min.clone()};
+
+                    for i in 0..num_values {
+                        max_values[i] = constraint_max[i];    
+                        min_values[i] = constraint_min[i];
+                    }
+                }
+                _ => {}
+            }  
+        } else {
+            if let Some((min_val, max_val)) = random_range {
+                if min_val > max_val {return Err(VariableSubsetError::InvalidMinMaxValues)}
+                min_values = vec![min_val; num_values];
+                max_values = vec![max_val; num_values];
+            }
+    
+            
+        }
+
+        
         for _ in 0..pop_size {
             let mut individual: Vec<T> = Vec::with_capacity(num_values);
 
-            for _ in 0..num_values {
-                let random_val = rng.gen_range(min_val..max_val);
+            for i in 0..num_values {
+                let random_val = rng.gen_range(min_values[i]..=max_values[i]);
                 individual.push(random_val);
             }
 
@@ -505,6 +541,7 @@ mod tests_subsets {
         // Ensure values are within the custom range [10.0, 20.0]
         for individual in population {
             for value in individual {
+                println!("Value: {}", &value);
                 assert!(*value >= 10.0 && *value <= 20.0, "Value is out of custom range [10.0, 20.0].");
             }
         }

@@ -399,7 +399,14 @@ impl<'a> AmalgamIdea<'a> {
             sampled_with_shifted[i] = shifted_ind;
         }
 
-        Ok(sampled_with_shifted)
+        // Ensure that shifted values respect constraints
+        let subsets = self.subsets.as_ref().unwrap();
+
+        let corrected_shifted = subsets.enforce_constraint_external(&sampled_with_shifted)
+        .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
+
+
+        Ok(corrected_shifted)
     }
 }
 
