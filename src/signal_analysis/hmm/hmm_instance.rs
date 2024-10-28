@@ -181,8 +181,11 @@ impl<'a> HMMInstance<'a> {
 
         // Call the sub-functions to validate the components
         Self::check_start_matrix_validity(start_matrix, states.len())?;
+        // println!("start matrix was fine");
         Self::check_transition_matrix_validity(transition_matrix, states.len())?;
+        // println!("transition matrix was fine");
         Self::check_states_validity(states)?;
+        // println!("states was fine");
 
         Ok(())
     }
@@ -522,6 +525,31 @@ impl<'a> HMMInstance<'a> {
         Ok(states)
     }
 
+    pub fn generate_state_set(
+        values: &[f64],
+        noise_std: &[f64],
+    ) -> Result<Vec<State>, HMMInstanceError> {
+        // Check if the dimensions of values and noise_std match
+        if values.len() != noise_std.len() {
+            return Err(HMMInstanceError::InvalidStateParametersLen);
+        }
+    
+        let num_states = values.len();
+        let mut states = Vec::with_capacity(num_states);
+    
+        // Generate states based on provided values and noise_std
+        for (id, (&value, &std)) in values.iter().zip(noise_std.iter()).enumerate() {
+            let state = State::new(id, value, std)
+                .map_err(|error| HMMInstanceError::StateError { error })?;
+            states.push(state);
+        }
+    
+        // Validate generated states
+        HMMInstance::check_states_validity(&states)?;
+    
+        Ok(states)
+    }
+
 
 
     
@@ -557,4 +585,6 @@ pub enum HMMInstanceError {
 
     InvalidMaxMinValues {max: f64, min: f64},       // Max must be > than min
     StateError {error: StateError},                 // Wrapper for a state error
+
+    InvalidStateParametersLen,
 }
