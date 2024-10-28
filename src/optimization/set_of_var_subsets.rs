@@ -5,7 +5,7 @@ use rand::Rng;
 use rand_distr::uniform::SampleUniform;
 use std::collections::HashSet;
 use std::ops::{Add, Sub, Div, Mul};
-use nalgebra::{constraint, DMatrix, DVector};
+use nalgebra::{DMatrix, DVector};
 
 
 
@@ -159,6 +159,25 @@ where
         }
 
         Ok(())
+    }
+
+    pub fn enforce_constraint_external(&self, values: &Vec<Vec<T>>) -> Result<Vec<Vec<T>>, VariableSubsetError> {
+        if values[0].len() != self.get_num_variables() {return Err(VariableSubsetError::IncompatiblePopulationShape)}
+        let scrambled_values = scramble_population(&self.indices, values);
+        
+        let mut corrected_scrambled: Vec<Vec<Vec<T>>> = Vec::new();
+        let subsets = &self.subsets;
+        for (subset_values, subset) in scrambled_values.iter().zip(subsets) {
+            if let Some(constraint) = subset.get_constraint() {
+                let corrected_single = enforce_constraint_external(subset_values, constraint);
+                corrected_scrambled.push(corrected_single);
+            }
+            
+        }
+
+        let unscrambled_values = unscramble_population(&self.indices, &corrected_scrambled);
+
+        Ok(unscrambled_values)
     }
 
 }
@@ -847,6 +866,53 @@ mod tests_set_var_subsets {
             scrambled_means, expected_scrambled_means,
             "Scrambled means do not match expected result"
         );
+    }
+
+    #[test]
+    fn test_enforce_constraint_external() {
+        // Define indices for the subsets
+        let indices = vec![
+            vec![0, 1], // First subset for variables 0 and 1
+            vec![2, 3], // Second subset for variables 2 and 3
+        ];
+
+        // Create SetVarSubsets with empty population and constraints for testing
+        let mut set_var_subsets = SetVarSubsets::<f64>::new_empty(indices).unwrap();
+
+        // Define constraints: Max for the first subset, Min for the second subset
+        let constraints = vec![
+            OptimizationConstraint::MaxValue { max: vec![3.0, 4.0] }, // Max values for subset 1
+            OptimizationConstraint::MinValue { min: vec![5.0, 6.0] }, // Min values for subset 2
+        ];
+
+        // Set constraints to the SetVarSubsets instance
+        set_var_subsets.set_constraints(constraints).unwrap();
+
+        // External population to enforce constraints on
+        let external_population = vec![
+            vec![4.0, 5.0, 3.0, 2.0], // Individual 1
+            vec![2.0, 6.0, 1.0, 7.0], // Individual 2
+        ];
+
+        // Enforce constraints externally
+        let result = set_var_subsets.enforce_constraint_external(&external_population);
+        assert!(result.is_ok(), "Failed to enforce constraints on external population");
+
+        // Retrieve the corrected population
+        let corrected_population = result.unwrap();
+
+        // Validate corrected population against constraints
+        for individual in &corrected_population {
+            // Check for subset 1 max constraints
+            assert!(individual[0] <= 3.0, "Value at index 0 exceeds max constraint of 3.0");
+            assert!(individual[1] <= 4.0, "Value at index 1 exceeds max constraint of 4.0");
+
+            // Check for subset 2 min constraints
+            assert!(individual[2] >= 5.0, "Value at index 2 is below min constraint of 5.0");
+            assert!(individual[3] >= 6.0, "Value at index 3 is below min constraint of 6.0");
+        }
+
+        println!("Corrected population after enforcing constraints: {:?}", corrected_population);
     }
 }
 

@@ -143,6 +143,10 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
             self.best_fitnesses.push(new_fit);
 
             iters += 1;
+
+            let (best_sol, fit) = self.get_best_solution().unwrap();
+            println!("In iteration {}", &iters);
+            println!("Best solution: {:?}. With fitness: {}", best_sol, fit);
         }
 
         Ok(())
