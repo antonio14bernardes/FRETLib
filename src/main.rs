@@ -1,6 +1,8 @@
 use std::cmp::min;
 use std::collections::HashSet;
 
+use fret_lib::optimization::amalgam_idea::AmalgamIdea;
+use fret_lib::optimization::optimizer::Optimizer;
 use fret_lib::signal_analysis::hmm::hmm_instance::HMMInstance;
 use fret_lib::signal_analysis::hmm::optimization_tracker::{StateCollapseHandle, TerminationCriterium};
 use fret_lib::signal_analysis::hmm::state::State;
@@ -8,12 +10,11 @@ use fret_lib::signal_analysis::hmm::hmm_matrices::{StartMatrix, TransitionMatrix
 use fret_lib::signal_analysis::hmm::viterbi::Viterbi;
 use fret_lib::signal_analysis::hmm::{baum_welch, HMM};
 use fret_lib::signal_analysis::hmm::baum_welch::*;
+use nalgebra::{DMatrix, DVector};
 use rand::seq;
 use plotters::prelude::*;
 use fret_lib::signal_analysis::hmm::occams_razor::*;
 use fret_lib::signal_analysis::hmm::kmeans::*;
-
-
 
 
 
@@ -175,45 +176,6 @@ pub fn trial_function(n: usize) -> (f64, usize, usize) {
 
 }
 
+    
 
-fn plot_sequences(sequence_values: &[f64], pred_ideal_sequence: &[f64]) -> Result<(), Box<dyn std::error::Error>> {
-    let root_area = BitMapBackend::new("sequence_plot.png", (800, 600)).into_drawing_area();
-    root_area.fill(&WHITE)?;
-
-    let x_range = 0..sequence_values.len();
-    let y_min = sequence_values.iter().cloned().fold(f64::INFINITY, f64::min)
-        .min(pred_ideal_sequence.iter().cloned().fold(f64::INFINITY, f64::min));
-    let y_max = sequence_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
-        .max(pred_ideal_sequence.iter().cloned().fold(f64::NEG_INFINITY, f64::max));
-
-    let mut chart = ChartBuilder::on(&root_area)
-        .caption("Sequence Values and Predicted Sequence", ("sans-serif", 50).into_font())
-        .margin(10)
-        .x_label_area_size(30)
-        .y_label_area_size(30)
-        .build_cartesian_2d(x_range.clone(), y_min..y_max)?;
-
-    chart.configure_mesh().draw()?;
-
-    // Plot sequence values as a red line
-    chart.draw_series(LineSeries::new(
-        sequence_values.iter().enumerate().map(|(i, &v)| (i, v)),
-        &RED,
-    ))?.label("Sequence Values")
-      .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
-
-    // Plot predicted ideal sequence values as a blue line
-    chart.draw_series(LineSeries::new(
-        pred_ideal_sequence.iter().enumerate().map(|(i, &v)| (i, v)),
-        &BLUE,
-    ))?.label("Predicted Ideal Sequence")
-      .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
-
-    // Add a legend to the chart
-    chart.configure_series_labels()
-        .background_style(&WHITE.mix(0.8))
-        .border_style(&BLACK)
-        .draw()?;
-
-    Ok(())
 }
