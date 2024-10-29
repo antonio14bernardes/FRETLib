@@ -1,3 +1,6 @@
+use nalgebra::DMatrix;
+use nalgebra::DVector;
+
 use super::super::super::variable_subsets::VariableSubsetError;
 use super::super::super::amalgam_idea::*;
 use super::super::super::optimizer::*;
@@ -441,4 +444,73 @@ fn test_set_parameters_with_incorrect_population_size_after_population_set() {
         "Expected PopulationIncompatibleWithParameters error, but got: {:?}",
         result
     );
+}
+
+#[test]
+fn test_set_initial_distribution() {
+    // Problem size and subsets for a 4-variable problem
+    let problem_size = 4;
+    let indices = vec![
+        vec![0, 1], // First subset for variables 0 and 1
+        vec![2, 3], // Second subset for variables 2 and 3
+    ];
+
+    // Instantiate AmalgamIdea and set subsets
+    let mut amalgam_idea = AmalgamIdea::new(problem_size, false);
+    amalgam_idea.set_dependency_subsets(indices).unwrap();
+
+    // Define mean vectors and covariance matrices for each subset
+    let mean1 = DVector::from_vec(vec![1.0, 2.0]);
+    let cov1 = DMatrix::from_vec(2, 2, vec![1.0, 0.2, 0.2, 1.5]);
+
+    let mean2 = DVector::from_vec(vec![3.0, 4.0]);
+    let cov2 = DMatrix::from_vec(2, 2, vec![2.0, 0.3, 0.3, 2.0]);
+
+    // Set initial distribution for each subset
+    let result = amalgam_idea.set_initial_distribution(&vec![mean1.clone(), mean2.clone()], &vec![cov1.clone(), cov2.clone()]);
+    assert!(result.is_ok(), "Failed to set initial distribution");
+
+    // Retrieve and verify the distribution from each subset in SetVarSubsets
+    if let Some(subsets) = amalgam_idea.get_subsets() {
+        for (i, subset) in subsets.get_subsets().iter().enumerate() {
+            if let Some((stored_mean, stored_cov)) = subset.get_distribution() {
+                let expected_mean = if i == 0 { &mean1 } else { &mean2 };
+                let expected_cov = if i == 0 { &cov1 } else { &cov2 };
+
+                assert_eq!(stored_mean, expected_mean, "Mean vector for subset {} does not match", i);
+                assert_eq!(stored_cov, expected_cov, "Covariance matrix for subset {} does not match", i);
+            } else {
+                panic!("Distribution not set correctly for subset {}", i);
+            }
+        }
+    } else {
+        panic!("Subsets not initialized correctly in AmalgamIdea");
+    }
+
+    println!("Initial distributions set successfully for all subsets.");
+}
+
+#[test]
+fn test_set_pop_size_manual() {
+    // Problem size and subsets for a 4-variable problem
+    let problem_size = 4;
+
+    let toy_fit = |ind: &[f64]| {
+        let sum: f64 = ind.iter().sum();
+        -sum
+    };
+
+    // Instantiate AmalgamIdea and set subsets
+    let mut amalgam_idea = AmalgamIdea::new(problem_size, false);
+    amalgam_idea.set_fitness_function(toy_fit);
+    
+    let pop_size = 100;
+    amalgam_idea.set_population_size(pop_size).unwrap();
+
+    amalgam_idea.initialize().unwrap();
+
+    let params = amalgam_idea.get_parameters().unwrap();
+
+    assert_eq!(params.population_size, pop_size);
+
 }

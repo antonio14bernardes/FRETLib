@@ -141,7 +141,7 @@ impl MultivariateGaussian {
         &self.cholesky_inv
     }
 
-    fn flatten_cov(cov: &Vec<Vec<f64>>) -> Vec<f64> {
+    pub fn flatten_cov(cov: &Vec<Vec<f64>>) -> Vec<f64> {
         let n = cov.len();
         let len = n * (n + 1) / 2;  // Length of flattened covariance matrix
     
@@ -158,7 +158,7 @@ impl MultivariateGaussian {
         flat_cov
     }
 
-    fn unflatten_cov(flat_cov: &Vec<f64>) -> Result<Vec<Vec<f64>>, MultivariateGaussianError> {
+    pub fn unflatten_cov(flat_cov: &Vec<f64>) -> Result<Vec<Vec<f64>>, MultivariateGaussianError> {
         let len = flat_cov.len();
         let n_float = (-1.0 + (1.0 + 8.0 * len as f64).sqrt()) / 2.0;
     
