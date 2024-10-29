@@ -5,7 +5,7 @@ use rand::Rng;
 use rand_distr::uniform::SampleUniform;
 use std::collections::HashSet;
 use std::ops::{Add, Sub, Div, Mul};
-use nalgebra::{constraint, DMatrix, DVector};
+use nalgebra::{DMatrix, DVector};
 
 
 
@@ -161,6 +161,27 @@ where
         Ok(())
     }
 
+    pub fn enforce_constraint_external(&self, values: &Vec<Vec<T>>) -> Result<Vec<Vec<T>>, VariableSubsetError> {
+        if values[0].len() != self.get_num_variables() {return Err(VariableSubsetError::IncompatiblePopulationShape)}
+        let scrambled_values = scramble_population(&self.indices, values);
+        
+        let mut corrected_scrambled: Vec<Vec<Vec<T>>> = Vec::new();
+        let subsets = &self.subsets;
+        for (subset_values, subset) in scrambled_values.iter().zip(subsets) {
+            if let Some(constraint) = subset.get_constraint() {
+                let corrected_single = enforce_constraint_external(subset_values, constraint);
+                corrected_scrambled.push(corrected_single);
+            } else {
+                corrected_scrambled.push(subset_values.clone());
+            }
+            
+        }
+
+        let unscrambled_values = unscramble_population(&self.indices, &corrected_scrambled);
+
+        Ok(unscrambled_values)
+    }
+
 }
 
 
@@ -191,7 +212,31 @@ where
         Ok(())
     }
 
-    // pub fn set_covariance_matrix_types(&mut self)
+    // Set the distribution for the subsets manually
+    pub fn set_distribution_manual(&mut self, means: &Vec<DVector<f64>>, covs: &Vec<DMatrix<f64>>) -> Result<(), VariableSubsetError> {
+        // Check that the lengths of means and covariances match
+        if means.len() != covs.len() {
+            return Err(VariableSubsetError::IncompatibleInputSizes);
+        }
+        
+        // Verify that each mean vector's length matches the dimensions of its corresponding covariance matrix
+        if means.iter().zip(covs).any(|(mean, cov)| mean.len() != cov.nrows() || cov.nrows() != cov.ncols()) {
+            return Err(VariableSubsetError::IncompatibleInputSizes);
+        }
+        
+        // Check that the number of subsets matches the number of mean-covariance pairs
+        if self.get_num_subsets() != means.len() {
+            return Err(VariableSubsetError::IncompatibleInputSizes);
+        }
+    
+        // If all checks pass, set the distributions for each subset
+        for (i, subset) in self.subsets.iter_mut().enumerate() {
+            subset.set_distribution_manual(means[i].clone(), covs[i].clone())?;
+        }
+    
+        Ok(())
+    }
+
     pub fn compute_distributions(&mut self) -> Result<(), VariableSubsetError> {
         self.subsets
         .iter_mut()
@@ -213,6 +258,16 @@ where
         let unscrambled_population = unscramble_population(&self.indices, &scrambled_population);
 
         Ok(unscrambled_population)
+    }
+
+    // Initialize population based on set distribution
+    pub fn initialize_population(&mut self, pop_size: usize, rng: &mut impl Rng) -> Result<(), VariableSubsetError> {
+        // Initialize all subsets' population
+        for subset in &mut self.subsets {
+            subset.initialize_population(pop_size, rng)?;
+        }
+        
+        Ok(())
     }
 
     pub fn initialize_random_population(
@@ -523,6 +578,7 @@ mod tests_set_var_subsets {
         println!("Population: {:?}", &population);
 
         for individual in &population {
+            println!("Individual: {:?}", individual);
             assert!(individual[0] <= 5.0 && individual[1] <= 5.0, "Max constraint violated");
             assert!(individual[2] >= 2.0 && individual[3] >= 2.0, "Min constraint violated");
         }
@@ -847,6 +903,159 @@ mod tests_set_var_subsets {
             scrambled_means, expected_scrambled_means,
             "Scrambled means do not match expected result"
         );
+    }
+
+    #[test]
+    fn test_enforce_constraint_external() {
+        // Define indices for the subsets
+        let indices = vec![
+            vec![0, 1], // First subset for variables 0 and 1
+            vec![2, 3], // Second subset for variables 2 and 3
+        ];
+
+        // Create SetVarSubsets with empty population and constraints for testing
+        let mut set_var_subsets = SetVarSubsets::<f64>::new_empty(indices).unwrap();
+
+        // Define constraints: Max for the first subset, Min for the second subset
+        let constraints = vec![
+            OptimizationConstraint::MaxValue { max: vec![3.0, 4.0] }, // Max values for subset 1
+            OptimizationConstraint::MinValue { min: vec![5.0, 6.0] }, // Min values for subset 2
+        ];
+
+        // Set constraints to the SetVarSubsets instance
+        set_var_subsets.set_constraints(constraints).unwrap();
+
+        // External population to enforce constraints on
+        let external_population = vec![
+            vec![4.0, 5.0, 3.0, 2.0], // Individual 1
+            vec![2.0, 6.0, 1.0, 7.0], // Individual 2
+        ];
+
+        // Enforce constraints externally
+        let result = set_var_subsets.enforce_constraint_external(&external_population);
+        assert!(result.is_ok(), "Failed to enforce constraints on external population");
+
+        // Retrieve the corrected population
+        let corrected_population = result.unwrap();
+
+        // Validate corrected population against constraints
+        for individual in &corrected_population {
+            // Check for subset 1 max constraints
+            assert!(individual[0] <= 3.0, "Value at index 0 exceeds max constraint of 3.0");
+            assert!(individual[1] <= 4.0, "Value at index 1 exceeds max constraint of 4.0");
+
+            // Check for subset 2 min constraints
+            assert!(individual[2] >= 5.0, "Value at index 2 is below min constraint of 5.0");
+            assert!(individual[3] >= 6.0, "Value at index 3 is below min constraint of 6.0");
+        }
+
+        println!("Corrected population after enforcing constraints: {:?}", corrected_population);
+    }
+
+
+    #[test]
+    fn test_set_distribution_manual() {
+        // Define subset indices
+        let indices = vec![
+            vec![0, 1], // Subset for variables 0 and 1
+            vec![2, 3], // Subset for variables 2 and 3
+        ];
+
+        // Create a SetVarSubsets instance with empty constraints
+        let mut set_var_subsets = SetVarSubsets::<f64>::new_empty(indices).unwrap();
+
+        // Define means and covariance matrices for each subset
+        let mean1 = DVector::from_vec(vec![1.5, 2.5]);
+        let cov1 = DMatrix::from_vec(2, 2, vec![1.0, 0.5, 0.5, 1.0]);
+
+        let mean2 = DVector::from_vec(vec![3.5, 4.5]);
+        let cov2 = DMatrix::from_vec(2, 2, vec![2.0, 1.0, 1.0, 2.0]);
+
+        // Apply manual distribution settings
+        let means = vec![mean1.clone(), mean2.clone()];
+        let covs = vec![cov1.clone(), cov2.clone()];
+
+        let result = set_var_subsets.set_distribution_manual(&means, &covs).unwrap();
+        // assert!(result.is_ok(), "Failed to manually set distributions");
+
+        // Verify that distributions were set correctly for each subset
+        let subsets = set_var_subsets.get_subsets();
+        for (i, subset) in subsets.iter().enumerate() {
+            if let Some((stored_mean, stored_cov)) = subset.get_distribution() {
+                assert_eq!(
+                    stored_mean, &means[i],
+                    "Mean for subset {} does not match the manually set mean",
+                    i
+                );
+                assert_eq!(
+                    stored_cov, &covs[i],
+                    "Covariance matrix for subset {} does not match the manually set covariance",
+                    i
+                );
+            } else {
+                panic!("Distribution not set correctly for subset {}", i);
+            }
+        }
+
+        println!("Manual distributions set successfully for all subsets.");
+    }
+
+    #[test]
+    fn test_initialize_population_with_distributions() {
+        // Define subset indices
+        let indices = vec![
+            vec![0, 1], // First subset for variables 0 and 1
+            vec![2, 3], // Second subset for variables 2 and 3
+        ];
+
+        // Create an empty SetVarSubsets instance
+        let mut set_var_subsets = SetVarSubsets::<f64>::new_empty(indices.clone()).unwrap();
+
+        // Define mean vectors and covariance matrices for each subset
+        let mean1 = DVector::from_vec(vec![1.0, 2.0]);
+        let cov1 = DMatrix::from_vec(2, 2, vec![1.0, 0.3, 0.3, 1.5]);
+
+        let mean2 = DVector::from_vec(vec![3.0, 4.0]);
+        let cov2 = DMatrix::from_vec(2, 2, vec![2.0, 0.5, 0.5, 2.0]);
+
+        // Manually set the distributions for each subset
+        set_var_subsets.set_distribution_manual(&vec![mean1.clone(), mean2.clone()], &vec![cov1.clone(), cov2.clone()]).unwrap();
+
+        // Define the population size
+        let pop_size = 100000;
+        let mut rng = thread_rng();
+
+        // Initialize population based on the set distributions
+        let result = set_var_subsets.initialize_population(pop_size, &mut rng);
+        assert!(result.is_ok(), "Failed to initialize population from distributions");
+
+        // Retrieve the initialized population
+        let population = set_var_subsets.get_population();
+
+        // Check if the population has the correct number of individuals
+        assert_eq!(population.len(), pop_size, "Population size does not match the expected size");
+
+        // Check that each individual has the correct number of variables
+        let num_vars = set_var_subsets.get_num_variables();
+        for individual in &population {
+            assert_eq!(individual.len(), num_vars, "Individual length does not match the number of variables");
+        }
+
+        // Optional: Check if the mean of the population is approximately close to the set means (within tolerance)
+        // Only a rough check due to randomness, suitable for testing distributions approximately
+        let mean_estimate: Vec<f64> = (0..num_vars)
+            .map(|i| population.iter().map(|ind| ind[i]).sum::<f64>() / pop_size as f64)
+            .collect();
+        println!("Mean estimate: {:?}", mean_estimate);
+        // Retrieve original full mean vector from scrambled subset means
+        let expected_mean = unscramble_means(&indices, &vec![mean1.clone(), mean2.clone()]);
+        for (i, mean_val) in expected_mean.iter().enumerate() {
+            assert!(
+                (mean_estimate[i] - mean_val).abs() < 0.01,
+                "Estimated mean for variable {} differs significantly from the expected mean",
+                i
+            );
+        }
     }
 }
 
