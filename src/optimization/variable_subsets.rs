@@ -181,15 +181,42 @@ where
     }
 
     // Set the distribution manually using the mean and flattened covariance vector
-    pub fn set_distribution_from_vecs(&mut self, mean: Vec<f64>, flat_cov: Vec<f64>) -> Result<(), MultivariateGaussianError> {
-        let distribution = MultivariateGaussian::new_from_vecs(mean, flat_cov)?;
+    pub fn set_distribution_from_vecs(&mut self, mean: Vec<f64>, flat_cov: Vec<f64>) -> Result<(), VariableSubsetError> {
+        // Check if the mean vector length matches the number of variables
+        if mean.len() != self.indices.len() {
+            return Err(VariableSubsetError::IncompatibleInputSizes);
+        }
+        
+        // Check if the flattened covariance vector has the correct length
+        let expected_len = self.indices.len() * (self.indices.len() + 1) / 2;
+        if flat_cov.len() != expected_len {
+            return Err(VariableSubsetError::IncompatibleInputSizes);
+        }
+        
+        // Try creating the MultivariateGaussian, returning a wrapped error if it fails
+        let distribution = MultivariateGaussian::new_from_vecs(mean, flat_cov)
+            .map_err(|err| VariableSubsetError::MultivariateGaussianError { err })?;
+        
         self.distribution = Some(distribution);
         Ok(())
     }
 
     // Set the distribution manually using DVector and DMatrix from nalgebra
-    pub fn set_distribution_manual(&mut self, mean: DVector<f64>, cov: DMatrix<f64>) -> Result<(), MultivariateGaussianError> {
-        let distribution = MultivariateGaussian::new(mean, cov)?;
+    pub fn set_distribution_manual(&mut self, mean: DVector<f64>, cov: DMatrix<f64>) -> Result<(), VariableSubsetError> {
+        // Check if the mean vector length matches the number of variables
+        if mean.len() != self.indices.len() {
+            return Err(VariableSubsetError::IncompatibleInputSizes);
+        }
+
+        // Check if the covariance matrix has the correct dimensions
+        if cov.nrows() != self.indices.len() || cov.ncols() != self.indices.len() {
+            return Err(VariableSubsetError::IncompatibleInputSizes);
+        }
+        
+        // Try creating the MultivariateGaussian, returning a wrapped error if it fails
+        let distribution = MultivariateGaussian::new(mean, cov)
+            .map_err(|err| VariableSubsetError::MultivariateGaussianError { err })?;
+        
         self.distribution = Some(distribution);
         Ok(())
     }
@@ -233,82 +260,100 @@ where
         }
     }
 
-    // New method: Initializes the population with random values considering constraints
+    // Init population based on set distribution
+    pub fn initialize_population(&mut self, pop_size: usize, rng: &mut impl Rng) -> Result<(), VariableSubsetError> {
+        let new_pop: Vec<Vec<T>> = self.sample_individuals(pop_size, rng)?;
+
+        self.population = Some(new_pop);
+
+        Ok(())
+    }
+
     pub fn initialize_random_population(
         &mut self,
         pop_size: usize,
         rng: &mut impl Rng,
         random_range: Option<(T, T)>,  // Optional range for random generation
     ) -> Result<(), VariableSubsetError> {
-
         let mut population: Vec<Vec<T>> = Vec::with_capacity(pop_size);
         let num_values = self.indices.len();
-
-        
+    
+        // Default min and max values
         let mut min_values = vec![T::default(); num_values];
         let mut max_values = vec![T::default() + T::from(1.0); num_values];
-
-        if let Some(constraint) = self.constraint.as_ref(){
+    
+        // Apply constraints
+        if let Some(constraint) = self.constraint.as_ref() {
             match constraint {
                 OptimizationConstraint::MaxValue { max } => {
-                    let constraint_max = if max.len() == 1 {vec![max[0]; num_values]} else {max.clone()};
-                    // Override max_values element only if it's higher than the constraint's max
+                    let constraint_max = if max.len() == 1 { vec![max[0]; num_values] } else { max.clone() };
                     for i in 0..num_values {
+
                         max_values[i] = constraint_max[i];
+    
+                        // Ensure range is valid
+                        if min_values[i] > max_values[i] {
+                            min_values[i] = max_values[i] - T::from(0.1); // Small buffer to avoid empty range
+                        }
                     }
-                    
                 }
                 OptimizationConstraint::MinValue { min } => {
-                    let constraint_min = if min.len() == 1 {vec![min[0]; num_values]} else {min.clone()};
-                    // Override min_values element only if it's higher than the constraint's min
+                    let constraint_min = if min.len() == 1 { vec![min[0]; num_values] } else { min.clone() };
                     for i in 0..num_values {
                         min_values[i] = constraint_min[i];
+    
+                        // Ensure range is valid
+                        if min_values[i] > max_values[i] {
+                            max_values[i] = min_values[i] + T::from(0.1); // Small buffer to avoid empty range
+                        }
                     }
                 }
                 OptimizationConstraint::MaxMinValue { max, min } => {
-                    // Override both max_values and min_values element if they are out of bounds
-                    let constraint_max = if max.len() == 1 {vec![max[0]; num_values]} else {max.clone()};
-                    let constraint_min = if min.len() == 1 {vec![min[0]; num_values]} else {min.clone()};
-
+                    let constraint_max = if max.len() == 1 { vec![max[0]; num_values] } else { max.clone() };
+                    let constraint_min = if min.len() == 1 { vec![min[0]; num_values] } else { min.clone() };
+                    
                     for i in 0..num_values {
-                        max_values[i] = constraint_max[i];    
+                        max_values[i] = constraint_max[i];
                         min_values[i] = constraint_min[i];
+    
+                        // Ensure range is valid
+                        if min_values[i] > max_values[i] {
+                            return Err(VariableSubsetError::InvalidMinMaxValues);
+                        }
                     }
                 }
                 _ => {}
-            }  
+            }
         } else {
+            // Apply random range if provided
             if let Some((min_val, max_val)) = random_range {
-                if min_val > max_val {return Err(VariableSubsetError::InvalidMinMaxValues)}
+                if min_val > max_val {
+                    return Err(VariableSubsetError::InvalidMinMaxValues);
+                }
                 min_values = vec![min_val; num_values];
                 max_values = vec![max_val; num_values];
             }
-    
-            
         }
-
-        
+    
+        // Generate random values for population
         for _ in 0..pop_size {
             let mut individual: Vec<T> = Vec::with_capacity(num_values);
-
             for i in 0..num_values {
                 let random_val = rng.gen_range(min_values[i]..=max_values[i]);
                 individual.push(random_val);
             }
-
+    
             // Apply the constraint to repair the values
             if let Some(ref constraint) = self.constraint {
                 constraint.repair(&mut individual);
             }
-
+    
             population.push(individual);
         }
-
+    
         self.population = Some(population);
         Ok(())
     }
-
-
 
 }
 
@@ -330,6 +375,7 @@ pub enum VariableSubsetError {
     InvalidCovMatrixTypeslen,
     SubsetsNotDefined,
     SubsetsAlreadyDefined,
+    IncompatibleInputSizes,
 
 }
 
@@ -668,6 +714,102 @@ mod tests_subsets {
         for individual in sampled_individuals {
             assert!(individual[0] >= 1.0 && individual[0] <= 4.0, "Sampled value out of range for index 0.");
             assert!(individual[1] >= 2.0 && individual[1] <= 5.0, "Sampled value out of range for index 1.");
+        }
+    }
+
+    #[test]
+    fn test_set_distribution_manually() {
+        let indices = vec![0, 1];
+        let mut subset = VariableSubset::<f64>::new(&indices);
+
+        // Define mean and covariance for the manual distribution setting
+        let mean = vec![1.0, 2.0];
+        let cov = vec![
+            vec![1.0, 0.5],
+            vec![0.5, 2.0],
+        ];
+
+        // Flatten the covariance matrix for `set_distribution_from_vecs`
+        let flat_cov = MultivariateGaussian::flatten_cov(&cov);
+
+        // Test `set_distribution_from_vecs`
+        let result = subset.set_distribution_from_vecs(mean.clone(), flat_cov.clone());
+        assert!(result.is_ok(), "Failed to set distribution from vecs.");
+
+        // Check that distribution was set correctly
+        if let Some((dist_mean, dist_cov)) = subset.get_distribution() {
+            let mean_vec = DVector::from_vec(mean.clone());
+            
+            // Unflatten `flat_cov` and convert it to DMatrix for comparison
+            let unflattened_cov = MultivariateGaussian::unflatten_cov(&flat_cov).expect("Failed to unflatten covariance matrix");
+            let cov_matrix = DMatrix::from_vec(2, 2, unflattened_cov.into_iter().flatten().collect());
+
+            assert_eq!(dist_mean, &mean_vec, "Mean vector does not match after setting from vecs.");
+            assert_eq!(dist_cov, &cov_matrix, "Covariance matrix does not match after setting from vecs.");
+        } else {
+            panic!("Distribution was not set when using set_distribution_from_vecs.");
+        }
+
+        // Test `set_distribution_manual`
+        let mut subset = VariableSubset::<f64>::new(&indices);
+        let mean_dvector = DVector::from_vec(mean.clone());
+        let cov_dmatrix = DMatrix::from_vec(2, 2, cov.iter().flatten().cloned().collect());
+
+        let result = subset.set_distribution_manual(mean_dvector.clone(), cov_dmatrix.clone());
+        assert!(result.is_ok(), "Failed to set distribution manually.");
+
+        // Check that distribution was set correctly
+        if let Some((dist_mean, dist_cov)) = subset.get_distribution() {
+            assert_eq!(dist_mean, &mean_dvector, "Mean vector does not match after setting manually.");
+            assert_eq!(dist_cov, &cov_dmatrix, "Covariance matrix does not match after setting manually.");
+        } else {
+            panic!("Distribution was not set when using set_distribution_manual.");
+        }
+    }
+
+    #[test]
+    fn test_initialize_population() {
+        let indices = vec![0, 1];
+        let mut subset = VariableSubset::<f64>::new(&indices);
+
+        // Define mean and covariance for the distribution
+        let mean = DVector::from_vec(vec![1.0, 2.0]);
+        let cov = DMatrix::from_vec(2, 2, vec![1.0, 0.5, 0.5, 2.0]);
+
+        // Set the distribution manually for the subset
+        subset.set_distribution_manual(mean.clone(), cov.clone()).unwrap();
+
+        // Set the population size
+        let pop_size = 100000;
+        let mut rng = thread_rng();
+
+        // Initialize the population using the distribution
+        let result = subset.initialize_population(pop_size, &mut rng);
+        assert!(result.is_ok(), "Failed to initialize population from distribution.");
+
+        // Retrieve the initialized population
+        let population = subset.get_population().expect("Population should be initialized");
+
+        // Check if the population has the correct number of individuals
+        assert_eq!(population.len(), pop_size, "Population size does not match the expected size.");
+
+        // Check if each individual has the correct number of dimensions
+        for individual in population {
+            assert_eq!(individual.len(), indices.len(), "Individual dimension does not match indices length.");
+        }
+
+        // Optional: Perform statistical checks on the population (e.g., mean and variance)
+        // Check if the population is approximately centered around the set mean
+        let mean_estimate: Vec<f64> = (0..indices.len())
+            .map(|i| population.iter().map(|ind| ind[i]).sum::<f64>() / pop_size as f64)
+            .collect();
+        println!("mean estimate: {:?}", mean_estimate);
+        for (i, mean_val) in mean.iter().enumerate() {
+            assert!(
+                (mean_estimate[i] - mean_val).abs() < 0.01,
+                "Sampled mean for dimension {} is not close to the expected mean.",
+                i
+            );
         }
     }
 }

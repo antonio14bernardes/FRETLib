@@ -93,14 +93,7 @@ impl<'a> AmalgamIdea<'a> {
 
         for (i, subset) in subsets_vec.iter_mut().enumerate() {
             subset.set_distribution_manual(new_means[i].clone(), new_covs[i].clone())
-            .map_err
-            (
-                |e| AmalgamIdeaError::VariableSubsetError
-                { 
-                    err: VariableSubsetError::MultivariateGaussianError { err: e }
-                }
-
-            )?;
+            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
         }
 
 

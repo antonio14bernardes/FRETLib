@@ -32,6 +32,7 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
         // Check if fitness function has been set
         let _ = self.fitness_function.as_ref().ok_or(AmalgamIdeaError::FitnessFunctionNotSet)?;
 
+        
         // Check if subsets have been initialized. If not, assume no subset division.
         if self.subsets.is_none() {
             let mut subsets = 
@@ -64,9 +65,15 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
 
             self.parameters = Some(new_params);
         }
-        
 
-        // Check if population has been initialized. If not, do random init from the subsets
+        // Check if population size has been manually set
+        if let Some(pop_size) = self.manual_pop_size {
+            let params = self.parameters.as_mut().unwrap();
+            params.population_size = pop_size;
+        }
+        
+        // Check if population has been initialized.
+        // If not, sample from manually set distribution or do random init from the subsets
         if self.initial_population.is_none() {
 
             let pop_size = self.get_pop_size().unwrap();
@@ -75,8 +82,13 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
 
             let mut rng = thread_rng(); // Use this function for random number generation
 
-            subsets.initialize_random_population(pop_size, &mut rng, None)
-            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
+            if self.init_with_manual_distribution {
+                subsets.initialize_population(pop_size, &mut rng)
+                .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
+            } else {
+                subsets.initialize_random_population(pop_size, &mut rng, None)
+                .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
+            }
 
             self.initial_population = Some(subsets.get_population());
         }
@@ -129,7 +141,9 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
     // Run the optimization process
     fn run(&mut self, max_iterations: usize) -> Result<(), AmalgamIdeaError>  {
         
-        self.initialize();
+        self.initialize()?;
+
+        println!("Initial population {:?}", self.initial_population);
 
         let c_mult_min = self.parameters.as_ref().unwrap().c_mult_min;
 
@@ -147,6 +161,7 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
             let (best_sol, fit) = self.get_best_solution().unwrap();
             println!("In iteration {}", &iters);
             println!("Best solution: {:?}. With fitness: {}", best_sol, fit);
+            // println!("Population: {:?}", self.current_population);
         }
 
         Ok(())

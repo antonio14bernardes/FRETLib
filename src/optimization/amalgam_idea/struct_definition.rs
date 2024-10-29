@@ -1,5 +1,7 @@
-use nalgebra::DVector;
+use nalgebra::{DMatrix, DVector};
 use std::fmt;
+
+use crate::signal_analysis::hmm::hmm_matrices::{StartMatrix, TransitionMatrix};
 
 use super::super::constraints::OptimizationConstraint;
 use super::super::optimizer::{Optimizer, OptimizationError};
@@ -25,6 +27,9 @@ pub struct AmalgamIdea<'a> {
     pub(super) current_mean_shifts: Vec<DVector<f64>>,
 
     pub(super) c_mult: Option<f64>,
+
+    pub(super) init_with_manual_distribution: bool, // True if the user initializes the distribution instead of the population
+    pub(super) manual_pop_size: Option<usize>, // Give the option for the user to set the population size manually without changing any other parameters
 }
 
 
@@ -54,6 +59,9 @@ impl<'a> AmalgamIdea<'a> {
             stagnant_iterations: 0,
 
             c_mult: None,
+
+            init_with_manual_distribution: false,
+            manual_pop_size: None
         }
     } 
 
@@ -77,6 +85,13 @@ impl<'a> AmalgamIdea<'a> {
     }
 
     pub fn set_initial_population(&mut self, initial_population: Vec<Vec<f64>>) -> Result<(), AmalgamIdeaError> {
+
+        if self.init_with_manual_distribution {return Err(AmalgamIdeaError::InitialDistributionAlreadySet)}
+        if let Some(pop_size) = self.manual_pop_size {
+            if pop_size != initial_population.len() {
+                return Err(AmalgamIdeaError::PopulationIncompatibleWithParameters);
+            }
+        }
 
         if initial_population.iter().any(|ind| ind.len() != self.problem_size) {
             return Err(AmalgamIdeaError::PopulationIncompatibleWithProblemSize)
@@ -133,6 +148,32 @@ impl<'a> AmalgamIdea<'a> {
         Ok(())
     }
 
+    pub fn set_initial_distribution(&mut self, means: &Vec<DVector<f64>>, covs: &Vec<DMatrix<f64>>) -> Result<(), AmalgamIdeaError> {
+        // Can't initialize distribution if initial population was manually set
+        if self.initial_population.is_some() {return Err(AmalgamIdeaError::InitialPopulationAlreadySet)}
+
+        // Can only set an initial distribution if the subsets are already setup, unless you provide only one set of means/stds
+        // In that case, assume one single set of variables
+        if self.subsets.is_none() {
+            if means.len() != 1 {
+                return Err(AmalgamIdeaError::VariableSubsetsNotDefined)
+            } else {
+                self.set_dependency_subsets(vec![(0..self.problem_size).collect()])?;
+            }
+        }
+
+        // If subsets is Some and the len of the input is different than the number of subsets, shit is incorrect
+        if let Some(subsets) = self.subsets.as_mut() {
+            subsets.set_distribution_manual(means, covs)
+            .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
+        }
+
+
+        self.init_with_manual_distribution = true;
+
+        Ok(())
+    }
+
     pub fn set_constraints(&mut self, constraints: Vec<OptimizationConstraint<f64>>) -> Result<(), AmalgamIdeaError> {
         if let Some(subsets) = self.subsets.as_mut() {
             subsets.set_constraints(constraints).map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
@@ -152,6 +193,23 @@ impl<'a> AmalgamIdea<'a> {
                 return Err(AmalgamIdeaError::VariableSubsetsNotDefined);
             }
         }
+
+        Ok(())
+    }
+
+    pub fn set_population_size(&mut self, pop_size: usize) -> Result<(), AmalgamIdeaError>{
+
+        if let Some(init_pop) = self.initial_population.as_ref() {
+            if init_pop.len() != pop_size {
+                return Err(AmalgamIdeaError::PopulationIncompatibleWithParameters);
+            }
+        }
+
+        if let Some(params) = &mut self.parameters {
+            params.population_size = pop_size;
+        }
+
+        self.manual_pop_size = Some(pop_size);
 
         Ok(())
     }
@@ -261,8 +319,16 @@ pub enum AmalgamIdeaError {
     InitializationNotPerformed,
     SelectionNotPerformed,
 
+    IncompatibleInputSizes,
+
+    InitialPopulationAlreadySet,
+    InitialDistributionAlreadySet,
+
 
 }
 
 impl OptimizationError for AmalgamIdeaError {}
 
+pub trait AmalgamIdeaFitness {
+    fn get_fitness(&self) -> &f64;
+}
