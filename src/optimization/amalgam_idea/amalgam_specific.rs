@@ -2,6 +2,8 @@ use nalgebra::{DVector, DMatrix};
 use rand::{thread_rng, Rng};
 
 
+use crate::optimization::optimizer::OptimizationFitness;
+
 use super::super::optimizer::{Optimizer, OptimizationError};
 use super::super::set_of_var_subsets::*;
 use super::super::variable_subsets::*;
@@ -11,7 +13,9 @@ use super::super::tools::select_top_n;
 use super::{AmalgamIdea, AmalgamIdeaError};
 
 
-impl<'a> AmalgamIdea<'a> {
+impl<'a, Fitness> AmalgamIdea<'a, Fitness>
+where Fitness: OptimizationFitness
+{
     pub fn selection(&mut self) -> Result<Vec<Vec<f64>>, AmalgamIdeaError> {
         // Check if initialization has been done:
         let _ = self.check_initialization()?;
@@ -154,22 +158,21 @@ impl<'a> AmalgamIdea<'a> {
         let mut improved_individuals = Vec::new();
         // let mut improved_fitnesses = Vec::new();
 
-        let mut new_best_fitness = *curr_best_fitness;
+        let mut new_best_fitness = curr_best_fitness;
         let mut new_best_individual = curr_best_solution;
 
         for (individual, fitness) in self.current_population.iter().zip(&self.current_fitnesses) {
-            if fitness > curr_best_fitness {
+            if fitness.get_fitness() > curr_best_fitness.get_fitness() {
                 improved_individuals.push(individual.clone());
-                //improved_fitnesses.push(fitness);
             }
 
-            if fitness > &new_best_fitness {
-                new_best_fitness = *fitness;
+            if fitness.get_fitness() > new_best_fitness.get_fitness() {
+                new_best_fitness = fitness;
                 new_best_individual = individual;
             }
         }
 
-        self.best_solution = Some((new_best_individual.clone(), new_best_fitness));
+        self.best_solution = Some((new_best_individual.clone(), new_best_fitness.clone()));
         
         // Reset latest selection to None
         // self.latest_selection = None;

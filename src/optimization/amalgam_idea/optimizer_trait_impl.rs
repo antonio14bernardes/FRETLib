@@ -2,6 +2,8 @@ use nalgebra::DVector;
 use rand::thread_rng;
 
 
+use crate::optimization::optimizer::OptimizationFitness;
+
 use super::{AmalgamIdea, AmalgamIdeaError};
 
 use super::super::optimizer::Optimizer;
@@ -11,12 +13,14 @@ use super::super::multivariate_gaussian::CovMatrixType;
 use super::super::tools::select_top_n;
 
 
-impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
+impl<'a, Fitness> Optimizer<f64, Fitness> for AmalgamIdea<'a, Fitness> 
+where Fitness: OptimizationFitness
+{
 
     type Error = AmalgamIdeaError;
 
     // Evaluate the fitness of a single solution
-    fn evaluate(&self, solution: &Vec<f64>) -> Result<f64, AmalgamIdeaError> {
+    fn evaluate(&self, solution: &Vec<f64>) -> Result<Fitness, AmalgamIdeaError> {
         let fitness_function = self
             .fitness_function
             .as_ref()
@@ -72,7 +76,6 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
             params.population_size = pop_size;
         }
         
-        println!("Made it to just before Population INIT");
         // Check if population has been initialized.
         // If not, sample from manually set distribution or do random init from the subsets
         if self.initial_population.is_none() {
@@ -94,18 +97,13 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
             self.initial_population = Some(subsets.get_population());
         }
 
-        
-        println!("Made it after pop init");
-
         // Initialize the distributions in the subsets
         self.subsets.as_mut().unwrap().compute_distributions()
         .map_err(|err| AmalgamIdeaError::VariableSubsetError { err })?;
 
-        println!("Made it after dist computation");
-
         // Set the current pop and fitness fields
         self.current_population = self.initial_population.as_ref().unwrap().clone();
-        self.current_fitnesses = self.evaluate_population()?;
+        self.current_fitnesses =  self.evaluate_population()?;
 
         // Allocate space for the prev mean shifts
         let mut init_mean_shift = Vec::<DVector<f64>>::new();
@@ -143,29 +141,39 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
     }
 
     // Run the optimization process
-    fn run(&mut self, max_iterations: usize) -> Result<(), AmalgamIdeaError>  {
+    fn run(&mut self) -> Result<(), AmalgamIdeaError>  {
         
         self.initialize()?;
 
-        println!("Initialization Done");
-
         let c_mult_min = self.parameters.as_ref().unwrap().c_mult_min;
 
-        let mut iters = 0_usize;
-        while iters < max_iterations &&  self.c_mult.unwrap() > c_mult_min{
+        let mut iters = 0;
+
+        let termination = 
+        |max_iters_option:Option<usize>, iters: &mut usize, c_mult_min:f64, c_mult_option:Option<f64>| {
+            *iters = *iters + 1;
+            let max_iter_reach = 
+            if let Some(max_iter) = max_iters_option {
+                *iters > max_iter
+            } else {false};
+
+            let c_mult_min_reach = c_mult_option.unwrap() < c_mult_min;
+
+            max_iter_reach || c_mult_min_reach
+        };
+
+        while !termination(self.max_iterations, &mut iters, c_mult_min, self.c_mult) {
             
             self.step()?;
 
-            let new_fit = self.best_solution.as_ref().unwrap().1;
+            let new_fit = self.best_solution.as_ref().unwrap().1.clone();
 
             self.best_fitnesses.push(new_fit);
 
-            iters += 1;
-
             let (best_sol, fit) = self.get_best_solution().unwrap();
             if iters % 20 == 0 {
-                println!("In iteration {}", &iters);
-                println!("Best solution: {:?}. With fitness: {}", best_sol, fit);
+                println!("In iteration {}", iters);
+                println!("Best solution: {:?}. With fitness: {:?}", best_sol, fit);
             }            
         }
 
@@ -173,7 +181,7 @@ impl<'a> Optimizer<f64> for AmalgamIdea<'a> {
     }
 
     // Retrieve the best solution found by the optimizer
-    fn get_best_solution(&self) -> Option<&(Vec<f64>, f64)> {
+    fn get_best_solution(&self) -> Option<&(Vec<f64>, Fitness)> {
         self.best_solution.as_ref() 
     }
 }

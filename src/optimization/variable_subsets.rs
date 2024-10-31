@@ -170,24 +170,9 @@ where
         let cov_type = self.cov_mat_type.as_ref().unwrap_or(&CovMatrixType::Full); // Default to Full cov matrix
 
         // Compute the multivariate Gaussian distribution based on these observations
-        // let distribution = MultivariateGaussian::from_observations(&values_slices, cov_type)
-        // .map_err(|e| VariableSubsetError::MultivariateGaussianError { err: e })?;
-        // self.distribution = Some(distribution);
-
-        let res = MultivariateGaussian::from_observations(&values_slices, cov_type);
-        match res {
-            Ok(distribution) => {self.distribution = Some(distribution)}
-            Err(e) => {
-                println!("Got error: {:?}", e);
-                // println!("Population was: {:?}", self.population);
-                if self.population.as_ref().unwrap().iter().any(|vec| vec.iter().any(|value| f64::is_nan(T::into(*value))) ){
-                    println!("Population had NANS");
-                }
-                return Err(VariableSubsetError::MultivariateGaussianError { err: e })
-            }
-        }
-         
-        
+        let distribution = MultivariateGaussian::from_observations(&values_slices, cov_type)
+        .map_err(|e| VariableSubsetError::MultivariateGaussianError { err: e })?;
+        self.distribution = Some(distribution);
 
         Ok(())
     }
@@ -226,10 +211,8 @@ where
         }
         
         // Try creating the MultivariateGaussian, returning a wrapped error if it fails
-        // println!("Mean: {}, Cov:{}, For subset {:?}", mean, cov, self.indices);
         let distribution = MultivariateGaussian::new(mean, cov)
             .map_err(|err| VariableSubsetError::MultivariateGaussianError { err })?;
-        // println!("Worked, For subset {:?}", self.indices);
         self.distribution = Some(distribution);
         Ok(())
     }
@@ -259,21 +242,12 @@ where
                 // Convert DVector<f64> to Vec<f64>
                 let new_ind: Vec<T> = out_dvec.iter().map(|a| T::from(*a)).collect();
 
-                if new_ind.iter().any(|value| f64::is_nan(T::into(*value))) {
-                    println!("Value was NAN before correction");
-                }
                 new_inds.push(new_ind);
             }
     
             if let Some(constraint) = self.constraint.as_ref() {
                 let corrected_inds = enforce_constraint_external(&new_inds, constraint);
 
-                for ind in &corrected_inds {
-                    if ind.iter().any(|value| f64::is_nan(T::into(*value))) {
-                        println!("Value was NAN after correction");
-                        println!("Constraint was: {:?}", self.constraint);
-                    }
-                }
                 new_inds = corrected_inds;
             }
 
@@ -286,10 +260,6 @@ where
     // Init population based on set distribution
     pub fn initialize_population(&mut self, pop_size: usize, rng: &mut impl Rng) -> Result<(), VariableSubsetError> {
         let new_pop: Vec<Vec<T>> = self.sample_individuals(pop_size, rng)?;
-        println!("Was here");
-        if new_pop.iter().any(|vec| vec.iter().any(|value| f64::is_nan(T::into(*value))) ){
-            println!("Population had NANS in initialize_population");
-        }
 
         self.population = Some(new_pop);
 
