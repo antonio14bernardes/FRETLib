@@ -83,6 +83,18 @@ impl<'a> HMMInstance<'a> {
         self.viterbi.set_transition_matrix(transition_matrix);
     }
 
+    pub fn get_states(&self) -> Option<&[State]> {
+        self.states
+    }
+    
+    pub fn get_start_matrix(&self) -> Option<&StartMatrix> {
+        self.start_matrix
+    }
+    
+    pub fn get_transition_matrix(&self) -> Option<&TransitionMatrix> {
+        self.transition_matrix
+    }
+
     // Checks validity of the start matrix
     pub fn check_start_matrix_validity(
         start_matrix: &StartMatrix,

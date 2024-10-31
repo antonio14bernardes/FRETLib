@@ -23,6 +23,7 @@ pub mod optimization_tracker;
 pub mod probability_matrices;
 pub mod occams_razor;
 pub mod kmeans;
+pub mod amalgam_tools;
 use state::*;
 use hmm_matrices::*; 
 

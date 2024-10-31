@@ -4,6 +4,7 @@ use std::cmp::PartialOrd;
 #[derive(Debug, Clone)]
 pub enum OptimizationConstraint<T> {
     SumTo {sum: T},
+    PositiveSumTo{sum: T},
     MaxValue {max: Vec<T>},
     MinValue {min: Vec<T>},
     MaxMinValue {max: Vec<T>, min: Vec<T>},
@@ -12,17 +13,45 @@ pub enum OptimizationConstraint<T> {
 
 impl<T> OptimizationConstraint<T>
 where
-    T: Default + Copy + PartialOrd + Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T>,
+    T: Default + Copy + PartialOrd + Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + From<f64> + Into<f64>,
 {
     pub fn repair(&self, values: &mut [T]) {
         match self {
+
+            // Warning: Problematic if current sum happens to be 0
             OptimizationConstraint::SumTo { sum } => {
-                let mut current_sum = T::default();
+                let mut current_sum = T::from(0.0);
                 for value in values.iter().copied() {
                     current_sum = current_sum + value;
                 }
 
-                if current_sum != *sum {
+                // If current sum is 0, set to the sum / num values I guess
+                if current_sum == T::from(0.0) {
+                    for i in 0..values.len() {
+                        values[i] = *sum / (T::from(values.len() as f64));
+                    }
+                } else if current_sum != *sum {
+                    let factor = *sum / current_sum;
+                    for value in values.iter_mut() {
+                        *value = *value * factor;
+                    }
+                }
+            }
+
+            // Warning: Problematic if current sum happens to be 0
+            OptimizationConstraint::PositiveSumTo{sum} => {
+                let mut current_sum = T::from(0.0);
+                for value in values.iter_mut() {
+                    *value = if *value >= T::default() {*value} else {T::default()};
+
+                    current_sum = current_sum + value.clone();
+                }
+                // If current sum is 0, set to the sum / num values I guess
+                if current_sum == T::from(0.0) {
+                    for i in 0..values.len() {
+                        values[i] = *sum / (T::from(values.len() as f64));
+                    }
+                } else if current_sum != *sum {
                     let factor = *sum / current_sum;
                     for value in values.iter_mut() {
                         *value = *value * factor;
@@ -153,5 +182,30 @@ mod tests {
         
         let sum: f64 = values.iter().sum();
         assert_eq!(sum, -12.0, "Sum should equal the target value of -12.0");
+    }
+
+    #[test]
+    fn test_positive_sum_to_constraint() {
+        let mut values = vec![-1.0, 2.0, 3.0, -4.0, 5.0];
+        let constraint = OptimizationConstraint::PositiveSumTo { sum: 10.0 };
+        constraint.repair(&mut values);
+
+        // Check that all values are non-negative
+        assert!(values.iter().all(|&x| x >= 0.0), "All values should be non-negative.");
+
+        // Check that the sum matches the target
+        let sum: f64 = values.iter().sum();
+        assert!((sum - 10.0).abs() < 1e-6, "Sum should equal the target value of 10.0");
+
+        // Ensure the proportionality of non-zero values is maintained
+        let original_values = vec![0.0, 2.0, 3.0, 0.0, 5.0]; // Negative values replaced by 0 for comparison
+        let adjusted_sum: f64 = original_values.iter().sum();
+
+        for (original, adjusted) in original_values.iter().zip(values.iter()) {
+            if *original > 0.0 && adjusted_sum > 0.0 {
+                let expected_value = (*original / adjusted_sum) * 10.0;
+                assert!((adjusted - expected_value).abs() < 1e-6, "Values should be proportional to the target sum.");
+            }
+        }
     }
 }
