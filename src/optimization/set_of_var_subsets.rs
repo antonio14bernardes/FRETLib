@@ -121,7 +121,7 @@ where T: Copy + Clone + Default + std::fmt::Debug,
 
 impl<T> SetVarSubsets<T>
 where
-    T: Default + Copy + PartialOrd + Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + std::fmt::Debug,
+    T: Default + Copy + PartialOrd + Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + From<f64> + Into<f64> + std::fmt::Debug,
 {
     pub fn new(indices: Vec<Vec<usize>>, population: Vec<Vec<T>>, constraints_option: Option<Vec<OptimizationConstraint<T>>>) -> Result<Self, VariableSubsetError> {
         
@@ -190,7 +190,7 @@ impl<T> SetVarSubsets<T>
 where
     T: Copy + Clone + Into<f64> + Default + PartialOrd
      + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> 
-     + From<f64> + SampleUniform  + std::fmt::Debug,
+     + From<f64> + Into<f64> +  SampleUniform  + std::fmt::Debug,
 {
 
     // Set the covariance matrix type for each subset
@@ -265,6 +265,7 @@ where
         // Initialize all subsets' population
         for subset in &mut self.subsets {
             subset.initialize_population(pop_size, rng)?;
+            
         }
         
         Ok(())
