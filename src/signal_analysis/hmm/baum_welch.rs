@@ -220,7 +220,7 @@ impl BaumWelch {
         let log_likelihood_option = hmm_instance.take_log_likelihood();
 
         // Kill hmm_instance
-        drop(hmm_instance);
+        // drop(hmm_instance);
 
         // Extract stuff from the options
         let viterbi_pred = viterbi_pred_option.ok_or(BaumWelchError::ViterbiPredictionNotFound)?;

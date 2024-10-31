@@ -91,7 +91,6 @@ impl MultivariateGaussian {
         cov_matrix /= num_observations as f64;
 
         let [cholesky, cholesky_inv] = get_cholesky_and_inv_stable(&mut cov_matrix)?;
-
         Ok(MultivariateGaussian {
             mean,
             cov: cov_matrix,
@@ -99,6 +98,21 @@ impl MultivariateGaussian {
             cholesky_inv
         })
 
+
+        // let res = get_cholesky_and_inv_stable(&mut cov_matrix);
+        // // Attempt to get the Cholesky decomposition and its inverse
+        // match get_cholesky_and_inv_stable(&mut cov_matrix) {
+        //     Ok([cholesky, cholesky_inv]) => Ok(MultivariateGaussian {
+        //         mean,
+        //         cov: cov_matrix,
+        //         cholesky,
+        //         cholesky_inv,
+        //     }),
+        //     Err(e) => {
+        //         println!("Problematic population: {:?}", observations);
+        //         Err(e)
+        //     }
+        // }
     }
 
     // Sample from the multivariate normal distribution using Cholesky decomp
