@@ -8,6 +8,7 @@ use rand_distr::uniform::SampleUniform;
 use core::num;
 use std::collections::HashSet;
 use std::ops::{Add, Sub, Div, Mul};
+use std::fmt::Debug;
 
 
 #[derive(Debug)]
@@ -63,20 +64,7 @@ where T: Clone,
     }
 }
 
-pub fn enforce_constraint_external<T>(population: &Vec<Vec<T>>, constraint: &OptimizationConstraint<T>) -> Vec<Vec<T>>
-where
-    T: Default + Copy + PartialOrd + Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + From<f64> + Into<f64>,
-{
-    let mut corrected_population: Vec<Vec<T>> = Vec::new();
-    
-    for individual in population {
-        let mut corrected_individual = individual.clone(); 
-        constraint.repair(&mut corrected_individual); // Apply the constraint repair
-        corrected_population.push(corrected_individual); // Add to the corrected population
-    }
 
-    corrected_population
-}
 
 
 impl<T> VariableSubset<T>
@@ -128,15 +116,6 @@ where
     
         Ok(())
     }
-}
-
-
-impl<T> VariableSubset<T> 
-where
-    T: Copy + Clone + Into<f64> + Default + PartialOrd
-     + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> 
-     + From<f64> + Into<f64> + SampleUniform + std::fmt::Debug,
-{
 
     /******
      * WARNING. At this time, the distribution for the current struct can only be a 
@@ -336,8 +315,15 @@ where
         for _ in 0..pop_size {
             let mut individual: Vec<T> = Vec::with_capacity(num_values);
             for i in 0..num_values {
-                let random_val = rng.gen_range(min_values[i]..=max_values[i]);
-                individual.push(random_val);
+                let min_f64 = min_values[i].into();
+                let max_f64 = max_values[i].into();
+                
+                // Generate a random value in the range [min, max] without SampleUniform
+                let random_factor = rng.gen::<f64>(); // Between 0.0 and 1.0
+                let random_val_f64 = min_f64 + random_factor * (max_f64 - min_f64);
+                
+                // Convert back to T
+                individual.push(T::from(random_val_f64));
             }
     
             // Apply the constraint to repair the values
@@ -355,6 +341,22 @@ where
 }
 
 
+pub fn enforce_constraint_external<T>(population: &Vec<Vec<T>>, constraint: &OptimizationConstraint<T>) -> Vec<Vec<T>>
+where
+    T: Default + Copy + Clone + PartialOrd + 
+    Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + 
+    From<f64> + Into<f64>,
+{
+    let mut corrected_population: Vec<Vec<T>> = Vec::new();
+    
+    for individual in population {
+        let mut corrected_individual = individual.clone(); 
+        constraint.repair(&mut corrected_individual); // Apply the constraint repair
+        corrected_population.push(corrected_individual); // Add to the corrected population
+    }
+
+    corrected_population
+}
 
 #[derive(Debug)]
 pub enum VariableSubsetError {
