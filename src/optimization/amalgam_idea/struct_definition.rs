@@ -1,6 +1,7 @@
 use nalgebra::{DMatrix, DVector};
-use std::fmt;
+use std::fmt::{self, Debug};
 
+use crate::optimization::optimizer::OptimizationFitness;
 use crate::signal_analysis::hmm::hmm_matrices::{StartMatrix, TransitionMatrix};
 
 use super::super::constraints::OptimizationConstraint;
@@ -10,18 +11,21 @@ use super::super::variable_subsets::*;
 use super::amalgam_parameters::*;
 
 
-pub struct AmalgamIdea<'a> {
+pub struct AmalgamIdea<'a, Fitness> 
+where Fitness: OptimizationFitness
+{
+    pub(super) max_iterations: Option<usize>,
     pub(super) problem_size: usize,
     pub(super) iter_memory: bool,
     pub(super) parameters: Option<AmalgamIdeaParameters>,
-    pub(super) fitness_function: Option<Box<dyn Fn(&[f64]) -> f64 + 'a>>,
+    pub(super) fitness_function: Option<Box<dyn Fn(&[f64]) -> Fitness + 'a>>,
     pub(super) subsets: Option<SetVarSubsets<f64>>,
     pub(super) initial_population: Option<Vec<Vec<f64>>>,
     pub(super) current_population: Vec<Vec<f64>>,
     // pub(super) latest_selection: Option<Vec<Vec<f64>>>,
-    pub(super) best_solution: Option<(Vec<f64>, f64)>,
-    pub(super) current_fitnesses: Vec<f64>,
-    pub(super) best_fitnesses: Vec<f64>,
+    pub(super) best_solution: Option<(Vec<f64>, Fitness)>,
+    pub(super) current_fitnesses: Vec<Fitness>,
+    pub(super) best_fitnesses: Vec<Fitness>,
     pub(super) stagnant_iterations: usize,
 
     pub(super) current_mean_shifts: Vec<DVector<f64>>,
@@ -34,9 +38,12 @@ pub struct AmalgamIdea<'a> {
 
 
 // Basic non algo related methods
-impl<'a> AmalgamIdea<'a> {
+impl<'a, Fitness> AmalgamIdea<'a, Fitness>
+where Fitness: OptimizationFitness
+{
     pub fn new(problem_size: usize, iter_memory: bool) -> Self {
         Self {
+            max_iterations: None,
             problem_size,
             iter_memory,
 
@@ -65,6 +72,10 @@ impl<'a> AmalgamIdea<'a> {
         }
     } 
 
+    pub fn set_max_iterations(&mut self, max_iters: usize) {
+        self.max_iterations = Some(max_iters);
+    }
+
     pub fn set_parameters(&mut self, parameters: AmalgamIdeaParameters) -> Result<(), AmalgamIdeaError> {
         // Check population size compatibility with parameters
         if let Some(population) = self.initial_population.as_ref() {
@@ -79,7 +90,7 @@ impl<'a> AmalgamIdea<'a> {
     }
     
     pub fn set_fitness_function<F>(&mut self, fitness_function: F)
-    where F: Fn(&[f64]) -> f64 + 'a,
+    where F: Fn(&[f64]) -> Fitness + 'a,
     {
         self.fitness_function = Some(Box::new(fitness_function));
     }
@@ -233,8 +244,12 @@ impl<'a> AmalgamIdea<'a> {
         &self.current_population
     }
 
-    pub fn get_current_fitnesses(&self) -> &Vec<f64> {
+    pub fn get_current_fitnesses(&self) -> &Vec<Fitness> {
         &self.current_fitnesses
+    }
+
+    pub fn get_current_fitness_values(&self) -> Vec<f64> {
+        self.current_fitnesses.iter().map(|f| f.get_fitness()).collect()
     }
 
     pub fn get_subsets(&self) -> Option<&SetVarSubsets<f64>> {
@@ -253,7 +268,7 @@ impl<'a> AmalgamIdea<'a> {
         self.stagnant_iterations
     }
 
-    pub fn get_fitnesses(&self) -> &Vec<f64> {
+    pub fn get_fitnesses(&self) -> &Vec<Fitness> {
         &self.best_fitnesses
     }
 
@@ -269,18 +284,20 @@ impl<'a> AmalgamIdea<'a> {
         Ok(())
     }
 
-    pub fn evaluate_population(&self) -> Result<Vec<f64>, AmalgamIdeaError> {
+    pub fn evaluate_population(&self) -> Result<Vec<Fitness>, AmalgamIdeaError> {
         let population = &self.current_population;
-        let evals: Vec<f64> = population
+        let evals: Vec<Fitness> = population
             .iter()
             .map(|individual| self.evaluate(individual))
-            .collect::<Result<Vec<f64>, AmalgamIdeaError>>()?;
+            .collect::<Result<Vec<Fitness>, AmalgamIdeaError>>()?;
 
         Ok(evals)
     }
 }
 
-impl<'a> fmt::Debug for AmalgamIdea<'a> {
+impl<'a, Fitness> fmt::Debug for AmalgamIdea<'a, Fitness> 
+where Fitness: OptimizationFitness + Debug
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("AmalgamIdea")
             .field("problem_size", &self.problem_size)

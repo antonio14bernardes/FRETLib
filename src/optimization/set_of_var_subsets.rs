@@ -6,6 +6,7 @@ use rand_distr::uniform::SampleUniform;
 use std::collections::HashSet;
 use std::ops::{Add, Sub, Div, Mul};
 use nalgebra::{DMatrix, DVector};
+use std::fmt::Debug;
 
 
 
@@ -18,7 +19,7 @@ where T: Clone,
 }
 
 impl<T> SetVarSubsets<T> 
-where T: Copy + Clone + Default + std::fmt::Debug,
+where T: Copy + Clone + Default + Debug,
 {
     pub fn new_empty(indices: Vec<Vec<usize>>) -> Result<SetVarSubsets<T>, VariableSubsetError> {
         // Check that indices isn't empty
@@ -121,7 +122,9 @@ where T: Copy + Clone + Default + std::fmt::Debug,
 
 impl<T> SetVarSubsets<T>
 where
-    T: Default + Copy + PartialOrd + Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + From<f64> + Into<f64> + std::fmt::Debug,
+    T: Default + Copy + Clone + PartialOrd + 
+    Add<Output = T> + Sub<Output = T> + Div<Output = T> + Mul<Output = T> + 
+    From<f64> + Into<f64> + Debug,
 {
     pub fn new(indices: Vec<Vec<usize>>, population: Vec<Vec<T>>, constraints_option: Option<Vec<OptimizationConstraint<T>>>) -> Result<Self, VariableSubsetError> {
         
@@ -181,17 +184,6 @@ where
 
         Ok(unscrambled_values)
     }
-
-}
-
-
-
-impl<T> SetVarSubsets<T> 
-where
-    T: Copy + Clone + Into<f64> + Default + PartialOrd
-     + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> 
-     + From<f64> + Into<f64> +  SampleUniform  + std::fmt::Debug,
-{
 
     // Set the covariance matrix type for each subset
     pub fn set_covariance_matrix_types(&mut self, cov_types: Vec<CovMatrixType>) -> Result<(), VariableSubsetError> {
@@ -1023,7 +1015,7 @@ mod tests_set_var_subsets {
         set_var_subsets.set_distribution_manual(&vec![mean1.clone(), mean2.clone()], &vec![cov1.clone(), cov2.clone()]).unwrap();
 
         // Define the population size
-        let pop_size = 100000;
+        let pop_size = 1000000;
         let mut rng = thread_rng();
 
         // Initialize population based on the set distributions
