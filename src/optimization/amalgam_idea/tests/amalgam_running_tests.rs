@@ -25,6 +25,13 @@ fn toy_fitness_function(values: &[f64]) -> ToyFitness {
     ToyFitness{fitness: sum}
 }
 
+struct toy_fitness_struct{}
+impl FitnessFunction<f64, ToyFitness> for toy_fitness_struct {
+    fn evaluate(&self,individual: &[f64]) -> ToyFitness {
+        toy_fitness_function(individual)
+    }
+}
+
 #[test]
 fn test_initialize_without_any_setup() {
     // Case: No subsets, parameters, or initial population are defined
@@ -33,7 +40,7 @@ fn test_initialize_without_any_setup() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the toy fitness function
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Attempt to initialize
     let result = amalgam.initialize();
@@ -86,7 +93,7 @@ fn test_initialize_with_predefined_subsets_and_population() {
     amalgam.set_initial_population(initial_population.clone()).unwrap();
 
     // Set the toy fitness function
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Attempt to initialize
     let result = amalgam.initialize();
@@ -146,7 +153,7 @@ fn test_initialize_with_only_predefined_parameters() {
     amalgam.set_parameters(custom_parameters).unwrap();
 
     // Set the toy fitness function
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Attempt to initialize
     let result = amalgam.initialize();
@@ -185,7 +192,7 @@ fn test_selection() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the toy fitness function
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Define custom parameters with tau to select 50% of the population
     let custom_parameters = AmalgamIdeaParameters::new(
@@ -245,7 +252,7 @@ fn test_update_distribution() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Define a simple fitness function (sum of values)
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Initialize subsets manually
     let subset_indices = vec![vec![0, 1, 2], vec![3, 4]];
@@ -313,7 +320,7 @@ fn test_update_population() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Define a simple fitness function (sum of values)
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Initialize subsets manually
     let subset_indices = vec![vec![0, 1, 2], vec![3, 4]];

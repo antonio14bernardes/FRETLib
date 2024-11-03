@@ -1,7 +1,7 @@
 use nalgebra::{DMatrix, DVector};
 use std::fmt::{self, Debug};
 
-use crate::optimization::optimizer::OptimizationFitness;
+use crate::optimization::optimizer::{FitnessFunction, OptimizationFitness};
 use crate::signal_analysis::hmm::hmm_matrices::{StartMatrix, TransitionMatrix};
 
 use super::super::constraints::OptimizationConstraint;
@@ -11,14 +11,16 @@ use super::super::variable_subsets::*;
 use super::amalgam_parameters::*;
 
 
-pub struct AmalgamIdea<'a, Fitness> 
-where Fitness: OptimizationFitness
+pub struct AmalgamIdea<F, Fitness> 
+where 
+F: FitnessFunction<f64, Fitness>,
+Fitness: OptimizationFitness
 {
     pub(super) max_iterations: Option<usize>,
     pub(super) problem_size: usize,
     pub(super) iter_memory: bool,
     pub(super) parameters: Option<AmalgamIdeaParameters>,
-    pub(super) fitness_function: Option<Box<dyn Fn(&[f64]) -> Fitness + 'a>>,
+    pub(super) fitness_function: Option<F>,
     pub(super) subsets: Option<SetVarSubsets<f64>>,
     pub(super) initial_population: Option<Vec<Vec<f64>>>,
     pub(super) current_population: Vec<Vec<f64>>,
@@ -38,8 +40,10 @@ where Fitness: OptimizationFitness
 
 
 // Basic non algo related methods
-impl<'a, Fitness> AmalgamIdea<'a, Fitness>
-where Fitness: OptimizationFitness
+impl<F, Fitness> AmalgamIdea<F, Fitness>
+where 
+F: FitnessFunction<f64, Fitness>,
+Fitness: OptimizationFitness
 {
     pub fn new(problem_size: usize, iter_memory: bool) -> Self {
         Self {
@@ -89,10 +93,9 @@ where Fitness: OptimizationFitness
         Ok(())
     }
     
-    pub fn set_fitness_function<F>(&mut self, fitness_function: F)
-    where F: Fn(&[f64]) -> Fitness + 'a,
+    pub fn set_fitness_function(&mut self, fitness_function: F)
     {
-        self.fitness_function = Some(Box::new(fitness_function));
+        self.fitness_function = Some(fitness_function);
     }
 
     pub fn set_initial_population(&mut self, initial_population: Vec<Vec<f64>>) -> Result<(), AmalgamIdeaError> {
@@ -295,8 +298,10 @@ where Fitness: OptimizationFitness
     }
 }
 
-impl<'a, Fitness> fmt::Debug for AmalgamIdea<'a, Fitness> 
-where Fitness: OptimizationFitness + Debug
+impl<F, Fitness> fmt::Debug for AmalgamIdea<F, Fitness> 
+where 
+F: FitnessFunction<f64, Fitness>,
+Fitness: OptimizationFitness
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("AmalgamIdea")

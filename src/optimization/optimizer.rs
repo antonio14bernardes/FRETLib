@@ -27,3 +27,8 @@ pub trait OptimizationError {}
 pub trait OptimizationFitness: std::fmt::Debug + Clone {
     fn get_fitness(&self) -> f64;
 }
+
+pub trait FitnessFunction<T, Fitness> 
+where Fitness: OptimizationFitness{
+    fn evaluate(&self,individual: &[T]) -> Fitness;
+}
