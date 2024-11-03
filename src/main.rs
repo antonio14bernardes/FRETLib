@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use fret_lib::optimization::amalgam_idea::{self, AmalgamIdea};
 use fret_lib::optimization::constraints::OptimizationConstraint;
-use fret_lib::optimization::optimizer::Optimizer;
+use fret_lib::optimization::optimizer::{FitnessFunction, Optimizer};
 use fret_lib::signal_analysis::hmm::hmm_instance::{HMMInstance, HMMInstanceError};
 use fret_lib::signal_analysis::hmm::optimization_tracker::{StateCollapseHandle, TerminationCriterium};
 use fret_lib::signal_analysis::hmm::state::State;
@@ -18,6 +18,23 @@ use plotters::prelude::*;
 use fret_lib::signal_analysis::hmm::occams_razor::*;
 use fret_lib::signal_analysis::hmm::kmeans::*;
 use fret_lib::signal_analysis::hmm::amalgam_tools::*;
+
+
+
+struct FitnessStruct {
+    sequence_values: Vec<f64>,
+}
+impl FitnessStruct {
+    pub fn new(sequence_values: &[f64]) -> Self {
+        Self{sequence_values: sequence_values.to_vec()}
+    }
+}
+impl FitnessFunction<f64, AmalgamHMMFitness> for FitnessStruct{
+    fn evaluate(&self,individual: &[f64]) -> AmalgamHMMFitness {
+        fitness_fn_direct(individual, &self.sequence_values)
+    }
+}
+// let fitness_closure = |individual: &[f64]| fitness_fn_direct(individual, &sequence_values);
 
 
 fn main() {
@@ -56,8 +73,7 @@ fn main() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set fitness function
-    let fitness_closure = |individual: &[f64]| fitness_fn_direct(individual, &sequence_values);
-    amalgam.set_fitness_function(fitness_closure);
+    amalgam.set_fitness_function(FitnessStruct::new(&sequence_values));
 
     // Set population size
     amalgam.set_population_size(100).unwrap();
