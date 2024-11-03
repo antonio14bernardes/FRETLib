@@ -3,7 +3,7 @@ use super::{baum_welch::BaumWelch, hmm_instance::HMMInstance, optimization_track
 pub fn bayes_information_criterion_binary_search<F>
 (test_function: F,  min_n: usize, max_n: usize) -> (usize, f64)
 where
-    F: Fn(usize) -> (f64, usize, usize), // log-likelihood, total num parameters, num samples
+    F: Fn(usize) -> (f64, usize, usize), // log-likelihood, total num parameters (not necessarily the value we give the function), num samples
 {
     let mut left = min_n;
     let mut right = max_n;

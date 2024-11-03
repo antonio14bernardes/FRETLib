@@ -1,10 +1,10 @@
-use super::super::super::optimization::amalgam_idea::*;
-use super::hmm_tools::{StateMatrix1D, StateMatrix2D, StateMatrix3D};
-use super::optimization_tracker::{TerminationCriterium, StateCollapseHandle};
-use super::{state::*, viterbi};
-use super::hmm_instance::*;
-use super::hmm_matrices::*;
-use super::baum_welch::*;
+use super::super::super::super::optimization::amalgam_idea::*;
+use super::super::hmm_tools::{StateMatrix1D, StateMatrix2D, StateMatrix3D};
+use super::super::optimization_tracker::{TerminationCriterium, StateCollapseHandle};
+use super::super::{state::*, viterbi};
+use super::super::hmm_instance::*;
+use super::super::hmm_matrices::*;
+use super::super::baum_welch::*;
 
 use rand::{seq, thread_rng, Rng};
 
@@ -21,7 +21,7 @@ fn add_jitter_to_states(states: &Vec<State>, rng: &mut impl Rng) -> Vec<State> {
     jittered_states
 }
 
-fn set_initial_states_with_jitter_baum(
+pub fn set_initial_states_with_jitter_baum(
     baum: &mut BaumWelch,
     states: &Vec<State>,
     rng: &mut impl Rng,
@@ -45,9 +45,6 @@ fn set_initial_states_with_jitter_baum(
 
 
 pub fn fitness_fn_baum_welch(individual: &[f64], num_states: usize, sequence_values: &[f64]) -> f64 {
-
-    // println!("New individual: {:?}", individual);
-    // Retrieve the states that the optimization algo wants to evaluate
 
     let state_means = individual[..num_states].to_vec();
     let state_stds = individual[num_states..].to_vec();
@@ -92,9 +89,7 @@ pub fn fitness_fn_baum_welch(individual: &[f64], num_states: usize, sequence_val
 
 
 
-pub fn fitness_fn_direct(individual: &[f64], sequence_values: &[f64]) -> f64 {
-    let num_states = 3; // Adjust this to reflect your actual number of states
-
+pub fn fitness_fn_direct(individual: &[f64], num_states: usize, sequence_values: &[f64]) -> f64 {
     // Split the individual into the respective parts
     let (means, rest) = individual.split_at(num_states);
     let (stds, rest) = rest.split_at(num_states);
