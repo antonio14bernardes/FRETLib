@@ -211,16 +211,12 @@ impl BaumWelch {
     
         hmm_instance.run_all_probability_matrices_with_scaled(observations)
         .map_err(|error| BaumWelchError::HMMInstanceError { error })?;
-        // println!("Second is fine");
 
         // Take ownership of the relevant date from hmm_instance
         let viterbi_pred_option = hmm_instance.take_viterbi_prediction();
         let gammas_option = hmm_instance.take_gammas();
         let xis_option = hmm_instance.take_xis();
         let log_likelihood_option = hmm_instance.take_log_likelihood();
-
-        // Kill hmm_instance
-        // drop(hmm_instance);
 
         // Extract stuff from the options
         let viterbi_pred = viterbi_pred_option.ok_or(BaumWelchError::ViterbiPredictionNotFound)?;
@@ -314,6 +310,22 @@ impl BaumWelch {
         Ok((self.final_states.as_ref().unwrap(), self.final_start_matrix.as_ref().unwrap(), self.final_transition_matrix.as_ref().unwrap()))
     }
 
+    pub fn get_states(&mut self) -> Option<&Vec<State>> {
+        self.final_states.as_ref()
+    }
+
+    pub fn get_start_matrix(&mut self) -> Option<&StartMatrix> {
+        self.final_start_matrix.as_ref()
+    }
+
+    pub fn get_transition_matrix(&mut self) -> Option<&TransitionMatrix> {
+        self.final_transition_matrix.as_ref()
+    }
+
+    pub fn get_log_likelihood(&mut self) -> Option<&f64> {
+        self.final_log_likelihood.as_ref()
+    }
+    
     pub fn take_states(&mut self) -> Option<Vec<State>> {
         self.final_states.take()
     }
