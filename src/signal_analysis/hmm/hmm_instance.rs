@@ -6,6 +6,8 @@ use super::hmm_matrices::*;
 use super::viterbi::*;
 use super::probability_matrices::*;
 
+pub const VALUE_SEQUENCE_THRESHOLD: f64 = 1e-7;
+
 pub struct HMMInstance<'a> {
     states: Option<&'a [State]>,
     start_matrix:Option<&'a StartMatrix>,
@@ -201,15 +203,30 @@ impl<'a> HMMInstance<'a> {
 
         Ok(())
     }
-    
+
+    pub fn check_sequence_validity(observations: &[f64], tolerance: f64) -> Result<(), HMMInstanceError> {
+        if observations.len() == 0 {return Err(HMMInstanceError::EmptyValueSequence)}
+
+        let min_value= observations.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
+        let max_value= observations.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+        let range = max_value - min_value;
+        if range <= tolerance {return Err(HMMInstanceError::ConstantValueSequence)}
+
+        if observations.iter().any(|value| value.is_nan()) {return Err(HMMInstanceError::ValueSequenceContainsNANs)}
+
+        Ok(())
+    }
     
     pub fn run_viterbi(&mut self, observations: &[f64]) -> Result<(),HMMInstanceError> {
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
+
         self.viterbi.run(observations, false)
     }
 
     pub fn run_alphas(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
 
         // Extract states and matrices
         let states = self.states.unwrap();
@@ -236,6 +253,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_betas(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
 
         // Extract states and matrices
         let states = self.states.unwrap();
@@ -253,6 +271,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_gammas(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
         if self.alphas.is_none() || self.betas.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
 
 
@@ -273,6 +292,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_xis(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
         if self.alphas.is_none() || self.betas.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
 
 
@@ -317,6 +337,7 @@ impl<'a> HMMInstance<'a> {
     pub fn run_alphas_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
 
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
 
         // Extract states and matrices
         let states = self.states.unwrap();
@@ -349,6 +370,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_betas_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
 
         // Extract states and matrices
         let states = self.states.unwrap();
@@ -369,6 +391,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_gammas_with_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
         if self.alphas_scaled.is_none() || self.betas_scaled.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
 
         // Extract states and matrices
@@ -388,6 +411,8 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_xis_with_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
+
         if self.alphas_scaled.is_none() || self.betas_scaled.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
         if self.scaling_factors.is_none() {return Err(HMMInstanceError::ScalingFactorsNotYetDefined)}
 
@@ -599,4 +624,8 @@ pub enum HMMInstanceError {
     StateError {error: StateError},                 // Wrapper for a state error
 
     InvalidStateParametersLen,
+    EmptyValueSequence,
+    InvalidValueSequence,
+    ConstantValueSequence,
+    ValueSequenceContainsNANs,
 }
