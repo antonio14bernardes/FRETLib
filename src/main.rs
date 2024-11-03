@@ -22,6 +22,7 @@ use fret_lib::signal_analysis::hmm::initialization::hmm_initializer::*;
 use fret_lib::signal_analysis::hmm::amalgam_integration::{amalgam_fitness_functions::*, amalgam_modes::*};
 
 
+
 fn trial_fn_baum(sequence: &[f64], num_states: usize) -> (f64, usize, usize) {
     // Define number of parameters
     let num_parameters = num_states * 3 + num_states * num_states;
@@ -74,6 +75,7 @@ fn trial_fn_baum(sequence: &[f64], num_states: usize) -> (f64, usize, usize) {
     (fitness, num_parameters, num_samples)
 
 }
+
 
 
 fn main() {
@@ -193,6 +195,12 @@ fn main_full_opt() {
     let fitness_closure = |individual: &[f64]| fitness_fn_direct(individual, num_states, &sequence_values);
     amalgam.set_fitness_function(fitness_closure);
 
+    // Set population size
+    amalgam.set_population_size(100).unwrap();
+
+    // Set max iterations
+    amalgam.set_max_iterations(1000);
+
     // Setup dependencies in variables: Make each element its own subset
     let subsets: Vec<Vec<usize>> = vec![
         vec![0], vec![1], vec![2], // Value subsets
@@ -203,9 +211,6 @@ fn main_full_opt() {
         vec![15, 16, 17], // Third row Transition matrix
     ];
     amalgam.set_dependency_subsets(subsets).unwrap();
-
-    // Set population size
-    // amalgam.set_population_size(100).unwrap();
 
     // Define constraints for each variable independently
     let constraints = vec![
@@ -285,11 +290,7 @@ fn main_full_opt() {
 
     let initial_start_probs_means_vec: Vec<DVector<f64>> = vec![DVector::from_vec(vec![initial_prob_mean; num_states])];
 
-    println!("initial_start_probs_means_vec: {:?}", initial_start_probs_means_vec);
-
     let initial_start_probs_cov_vec: Vec<DMatrix<f64>> = vec![DMatrix::from_diagonal(&DVector::from_vec(vec![initial_prob_std.powi(2); num_states]))];
-
-    println!("initial_start_probs_cov_vec: {:?}", initial_start_probs_cov_vec);
 
     let initial_transition_probs_means_vec: Vec<DVector<f64>> = (0..num_states)
         .map(|_| DVector::from_vec(vec![initial_prob_mean; num_states]))
@@ -321,7 +322,7 @@ fn main_full_opt() {
     amalgam.set_initial_distribution(&initial_means, &initial_covs).unwrap();
 
     // Run optimization
-    amalgam.run(10000).unwrap();
+    amalgam.run().unwrap();
 
     let (best_solution, best_fitness) = amalgam.get_best_solution().unwrap();
     println!("Best Solution: {:?}, Best Fitness: {:?}", best_solution, best_fitness);

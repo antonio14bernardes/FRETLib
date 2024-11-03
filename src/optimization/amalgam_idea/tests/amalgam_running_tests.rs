@@ -6,13 +6,23 @@ use super::super::amalgam_parameters::AmalgamIdeaParameters;
 
 use nalgebra::{DMatrix, DVector};
 
+#[derive(Debug, Clone)]
+struct ToyFitness {
+    fitness: f64
+}
 
-fn toy_fitness_function(values: &[f64]) -> f64 {
+impl OptimizationFitness for ToyFitness {
+    fn get_fitness(&self) -> f64 {
+        self.fitness
+    }
+}
+
+fn toy_fitness_function(values: &[f64]) -> ToyFitness {
     let mut sum = 0.0;
     for value in values {
         sum += value;
     }
-    sum
+    ToyFitness{fitness: sum}
 }
 
 #[test]
@@ -235,8 +245,7 @@ fn test_update_distribution() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Define a simple fitness function (sum of values)
-    let fitness_function = |solution: &[f64]| solution.iter().sum::<f64>();
-    amalgam.set_fitness_function(fitness_function);
+    amalgam.set_fitness_function(toy_fitness_function);
 
     // Initialize subsets manually
     let subset_indices = vec![vec![0, 1, 2], vec![3, 4]];
@@ -304,8 +313,7 @@ fn test_update_population() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Define a simple fitness function (sum of values)
-    let fitness_function = |solution: &[f64]| solution.iter().sum::<f64>();
-    amalgam.set_fitness_function(fitness_function);
+    amalgam.set_fitness_function(toy_fitness_function);
 
     // Initialize subsets manually
     let subset_indices = vec![vec![0, 1, 2], vec![3, 4]];
@@ -322,7 +330,7 @@ fn test_update_population() {
 
     // Store the previous population and fitnesses
     let prev_population = amalgam.get_current_population().clone();
-    let prev_fitnesses = amalgam.get_current_fitnesses().clone();
+    let prev_fitnesses = amalgam.get_current_fitness_values().clone();
 
     // Perform population update
     amalgam.update_population().unwrap();
@@ -354,7 +362,7 @@ fn test_update_population() {
 
     // Check if there has been any change in the fitnesses
     assert_ne!(
-        *amalgam.get_current_fitnesses(), prev_fitnesses,
+        *amalgam.get_current_fitness_values(), prev_fitnesses,
         "The fitness values should have changed after the population update"
     );
 }
