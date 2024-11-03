@@ -2,7 +2,7 @@ use nalgebra::DVector;
 use rand::thread_rng;
 
 
-use crate::optimization::optimizer::OptimizationFitness;
+use crate::optimization::optimizer::{FitnessFunction, OptimizationFitness};
 
 use super::{AmalgamIdea, AmalgamIdeaError};
 
@@ -13,8 +13,10 @@ use super::super::multivariate_gaussian::CovMatrixType;
 use super::super::tools::select_top_n;
 
 
-impl<'a, Fitness> Optimizer<f64, Fitness> for AmalgamIdea<'a, Fitness> 
-where Fitness: OptimizationFitness
+impl<F, Fitness> Optimizer<f64, Fitness> for AmalgamIdea<F, Fitness> 
+where 
+F: FitnessFunction<f64, Fitness>,
+Fitness: OptimizationFitness
 {
 
     type Error = AmalgamIdeaError;
@@ -26,7 +28,7 @@ where Fitness: OptimizationFitness
             .as_ref()
             .ok_or(AmalgamIdeaError::FitnessFunctionNotSet)?;
         
-        Ok(fitness_function(&solution))
+        Ok(fitness_function.evaluate(&solution))
 
     }
 

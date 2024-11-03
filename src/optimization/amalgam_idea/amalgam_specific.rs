@@ -2,7 +2,7 @@ use nalgebra::{DVector, DMatrix};
 use rand::{thread_rng, Rng};
 
 
-use crate::optimization::optimizer::OptimizationFitness;
+use crate::optimization::optimizer::{FitnessFunction, OptimizationFitness};
 
 use super::super::optimizer::{Optimizer, OptimizationError};
 use super::super::set_of_var_subsets::*;
@@ -13,8 +13,10 @@ use super::super::tools::select_top_n;
 use super::{AmalgamIdea, AmalgamIdeaError};
 
 
-impl<'a, Fitness> AmalgamIdea<'a, Fitness>
-where Fitness: OptimizationFitness
+impl<F, Fitness> AmalgamIdea<F, Fitness>
+where 
+F: FitnessFunction<f64, Fitness>,
+Fitness: OptimizationFitness
 {
     pub fn selection(&mut self) -> Result<Vec<Vec<f64>>, AmalgamIdeaError> {
         // Check if initialization has been done:
