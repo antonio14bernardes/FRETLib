@@ -22,8 +22,9 @@ pub mod baum_welch;
 pub mod optimization_tracker;
 pub mod probability_matrices;
 pub mod occams_razor;
-pub mod kmeans;
-pub mod amalgam_tools;
+pub mod initialization;
+pub mod amalgam_integration;
+pub mod number_states_finder;
 use state::*;
 use hmm_matrices::*; 
 
