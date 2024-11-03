@@ -27,6 +27,13 @@ fn toy_fitness_function(values: &[f64]) -> ToyFitness {
     ToyFitness{fitness: sum}
 }
 
+struct toy_fitness_struct{}
+impl FitnessFunction<f64, ToyFitness> for toy_fitness_struct {
+    fn evaluate(&self,individual: &[f64]) -> ToyFitness {
+        toy_fitness_function(individual)
+    }
+}
+
 
 #[test]
 fn test_evaluate_with_valid_fitness_function() {
@@ -36,7 +43,7 @@ fn test_evaluate_with_valid_fitness_function() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Test a sample solution
     let solution = vec![1.0, 2.0, 3.0, 4.0, 5.0];
@@ -57,7 +64,7 @@ fn test_set_parameters_with_subsets_single_parameter() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Manually define subsets
     let subset_indices = vec![vec![0, 1], vec![2, 3, 4]];
@@ -84,7 +91,7 @@ fn test_set_initial_population_with_valid_data() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Create a valid initial population where each individual matches the problem size
     let initial_population = vec![
@@ -113,7 +120,7 @@ fn test_set_initial_population_with_incorrect_sizes() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Create an initial population where one individual does not match the problem size
     let initial_population = vec![
@@ -140,7 +147,7 @@ fn test_set_initial_population_with_subsets_defined() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Define subsets manually
     let subset_indices = vec![vec![0, 1], vec![2, 3, 4]];
@@ -178,7 +185,7 @@ fn test_set_initial_population_with_subsets_not_defined() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Create a valid initial population where each individual matches the problem size
     let initial_population = vec![
@@ -208,7 +215,7 @@ fn test_set_dependency_subsets_already_defined() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Define initial subsets
     let initial_subset_indices = vec![vec![0, 1], vec![2, 3, 4]];
@@ -234,7 +241,7 @@ fn test_set_dependency_subsets_with_valid_data() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Define valid subsets
     let valid_subset_indices = vec![vec![0, 1], vec![2, 3, 4]];
@@ -260,7 +267,7 @@ fn test_set_dependency_subsets_with_invalid_data() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Define invalid subsets where an index is out of range
     let invalid_subset_indices = vec![vec![0, 1, 4], vec![2, 3, 5]]; // Index 5 is out of range for problem size 5
@@ -284,7 +291,7 @@ fn test_set_dependency_subsets_with_initial_population() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Create a valid initial population
     let initial_population = vec![
@@ -323,7 +330,7 @@ fn test_set_constraints_with_subsets_defined() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Define initial subsets
     let subset_indices = vec![vec![0, 1], vec![2, 3, 4]];
@@ -357,7 +364,7 @@ fn test_set_constraints_without_subsets_single_constraint() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Define a single constraint
     let constraints = vec![OptimizationConstraint::SumTo { sum: 10.0 }];
@@ -397,7 +404,7 @@ fn test_set_constraints_without_subsets_multiple_constraints() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Define multiple constraints
     let constraints = vec![
@@ -424,7 +431,7 @@ fn test_set_population_with_incorrect_number_of_individuals_after_parameters_set
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Set the parameters with a population_size of 3
     let param = AmalgamIdeaParameters::new(
@@ -457,7 +464,7 @@ fn test_set_parameters_with_incorrect_population_size_after_population_set() {
     let mut amalgam = AmalgamIdea::new(problem_size, iter_memory);
 
     // Set the fitness function in the optimizer
-    amalgam.set_fitness_function(toy_fitness_function);
+    amalgam.set_fitness_function(toy_fitness_struct{});
 
     // Set a population with 4 individuals
     let initial_population = vec![
@@ -494,7 +501,7 @@ fn test_set_initial_distribution() {
     // Instantiate AmalgamIdea and set subsets
     let mut amalgam_idea = AmalgamIdea::new(problem_size, false);
     // Set the fitness function in the optimizer
-    amalgam_idea.set_fitness_function(toy_fitness_function);
+    amalgam_idea.set_fitness_function(toy_fitness_struct{});
 
     amalgam_idea.set_dependency_subsets(indices).unwrap();
 
@@ -542,7 +549,7 @@ fn test_set_pop_size_manual() {
     // Instantiate AmalgamIdea and set subsets
     let mut amalgam_idea = AmalgamIdea::new(problem_size, false);
     // Set the fitness function in the optimizer
-    amalgam_idea.set_fitness_function(toy_fitness_function);
+    amalgam_idea.set_fitness_function(toy_fitness_struct{});
     
     let pop_size = 100;
     amalgam_idea.set_population_size(pop_size).unwrap();
