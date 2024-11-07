@@ -115,7 +115,7 @@ impl IDTarget for &State {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StateError {
     InvalidNoiseInput {input: f64},
     InvalidNoiseLimitInput {max: f64, min: f64},

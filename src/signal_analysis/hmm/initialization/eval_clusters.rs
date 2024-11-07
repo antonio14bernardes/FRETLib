@@ -1,12 +1,12 @@
-use core::{f64, num};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
-use std::f64::consts::PI;
 
-use super::kmeans::k_means_1D;
+use super::kmeans::k_means_1_d;
 
 
+
+#[derive(Debug, Clone)]
 pub enum ClusterEvaluationMethod {
     Silhouette,
     SimplifiedSilhouette,
@@ -45,7 +45,7 @@ impl Hash for UnorderedPair {
 }
 
 // Function to calculate the silhouette score
-pub fn silhouette_score_1D(cluster_means: &Vec<f64>, assignments: &Vec<usize>, data: &[f64]) -> f64 {
+pub fn silhouette_score_1_d(cluster_means: &Vec<f64>, assignments: &Vec<usize>, data: &[f64]) -> f64 {
     let num_clusters = cluster_means.len();
 
     // Divide data points into their clusters
@@ -125,7 +125,7 @@ pub fn silhouette_score_1D(cluster_means: &Vec<f64>, assignments: &Vec<usize>, d
 }
 
 // Compute the simplidied silhouette score. A lot faster.
-pub fn simplified_silhouette_score_1D(cluster_means: &Vec<f64>, assignments: &Vec<usize>, data: &[f64]) -> f64 {
+pub fn simplified_silhouette_score_1_d(cluster_means: &Vec<f64>, assignments: &Vec<usize>, data: &[f64]) -> f64 {
     // Divide data points into their clusters
     let num_clusters = cluster_means.len();
     let mut divided_clusters: Vec<Vec<f64>> = vec![Vec::new(); num_clusters];
@@ -165,9 +165,11 @@ pub fn simplified_silhouette_score_1D(cluster_means: &Vec<f64>, assignments: &Ve
 pub fn silhouette_analysis(
     sequence: &[f64], 
     min_k: usize, 
-    max_k: usize, 
+    max_k: usize,
+    max_iterations: usize,
+    tolerance: f64,
     simplified: bool, 
-) -> (usize, f64) {
+) -> Result<(usize, f64), ClusterEvalError> {
     let mut left = min_k;
     let mut right = max_k;
     let mut best_k = min_k;
@@ -177,18 +179,18 @@ pub fn silhouette_analysis(
         let mid = (left + right) / 2;
 
         // Calculate silhouette score for mid and mid + 1 clusters
-        let (cluster_means_mid, cluster_assignments_mid) = k_means_1D(sequence, mid, 100, 1e-3);
+        let (cluster_means_mid, cluster_assignments_mid) = k_means_1_d(sequence, mid, max_iterations, tolerance);
         let score_mid = if simplified {
-            silhouette_score_1D(&cluster_means_mid, &cluster_assignments_mid, sequence)
+            silhouette_score_1_d(&cluster_means_mid, &cluster_assignments_mid, sequence)
         } else {
-            simplified_silhouette_score_1D(&cluster_means_mid, &cluster_assignments_mid, sequence)
+            simplified_silhouette_score_1_d(&cluster_means_mid, &cluster_assignments_mid, sequence)
         };
 
-        let (cluster_means_next, cluster_assignments_next) = k_means_1D(sequence, mid + 1, 100, 1e-3);
+        let (cluster_means_next, cluster_assignments_next) = k_means_1_d(sequence, mid + 1, max_iterations, tolerance);
         let score_next = if simplified {
-            simplified_silhouette_score_1D(&cluster_means_next, &cluster_assignments_next, sequence)
+            simplified_silhouette_score_1_d(&cluster_means_next, &cluster_assignments_next, sequence)
         } else {
-            simplified_silhouette_score_1D(&cluster_means_next, &cluster_assignments_next, sequence)
+            simplified_silhouette_score_1_d(&cluster_means_next, &cluster_assignments_next, sequence)
         };
 
         // Track the best score and corresponding k
@@ -205,5 +207,11 @@ pub fn silhouette_analysis(
         }
     }
 
-    (best_k, best_score)
+    if best_score == f64::NEG_INFINITY {return Err(ClusterEvalError::AllTriesFailed)}
+    Ok((best_k, best_score))
+}
+
+#[derive(Debug, Clone)]
+pub enum ClusterEvalError{
+    AllTriesFailed,
 }

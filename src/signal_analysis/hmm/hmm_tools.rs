@@ -3,6 +3,7 @@ use super::state::*;
 
 
 
+
 /*
 Structs for State related Matrices.
 If these end up not needing any specific intrinsic validation, they 
@@ -425,7 +426,8 @@ mod tests_state_matrix_2d {
 }
 
 mod tests_state_matrix_3d {
-    use super::*;
+    use crate::signal_analysis::hmm::{hmm_tools::StateMatrix3D, State};
+
 
     #[test]
     fn test_state_matrix_3d_new() {

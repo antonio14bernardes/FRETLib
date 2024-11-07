@@ -1,6 +1,6 @@
 use super::state::*;
-use super::hmm_matrices::{TransitionMatrix, StartMatrix, ProbabilityMatrix, MatrixValidationError};
-use super::hmm_tools::{StateMatrix1D, StateMatrix2D};
+use super::hmm_matrices::{TransitionMatrix, StartMatrix};
+use super::hmm_tools::StateMatrix2D;
 use super::hmm_instance::{HMMInstance, HMMInstanceError};
 
 pub struct Viterbi<'a> {

@@ -11,7 +11,7 @@ pub trait ProbabilityMatrix {
 }
 
 // Custom error for matrix value validation
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MatrixValidationError {
     IncorrectShape,                                                    // If 2D, num of rows and columns must be the same
     VectorIncorrectValues { values: Vec<f64>},                         // If 1D, the vector/row matrix values dont sum to 1
@@ -588,7 +588,7 @@ mod tests_start_matrix {
     // Test for validation - vector incorrect values (VectorIncorrectValues error)
     #[test]
     fn test_start_matrix_validation_incorrect_values() {
-        let mut start_matrix = StartMatrix::new(vec![0.5, 0.4, 0.4]); // Sum is greater than 1.0
+        let start_matrix = StartMatrix::new(vec![0.5, 0.4, 0.4]); // Sum is greater than 1.0
 
         match start_matrix.validate() {
             Err(MatrixValidationError::VectorIncorrectValues { values }) => {
@@ -601,7 +601,7 @@ mod tests_start_matrix {
     // Test for validation - invalid values (InvalidValue error)
     #[test]
     fn test_start_matrix_validation_invalid_value() {
-        let mut start_matrix = StartMatrix::new(vec![1.5, 0.5, -0.5]); // Invalid values: > 1.0 and < 0.0
+        let start_matrix = StartMatrix::new(vec![1.5, 0.5, -0.5]); // Invalid values: > 1.0 and < 0.0
 
         match start_matrix.validate() {
             Err(MatrixValidationError::InvalidValue) => (),

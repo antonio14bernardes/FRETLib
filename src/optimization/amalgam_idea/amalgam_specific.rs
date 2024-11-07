@@ -4,9 +4,7 @@ use rand::{thread_rng, Rng};
 
 use crate::optimization::optimizer::{FitnessFunction, OptimizationFitness};
 
-use super::super::optimizer::{Optimizer, OptimizationError};
 use super::super::set_of_var_subsets::*;
-use super::super::variable_subsets::*;
 use super::super::tools::select_top_n;
 
 

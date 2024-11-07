@@ -2,7 +2,6 @@ use nalgebra::{DMatrix, DVector};
 use std::fmt::{self, Debug};
 
 use crate::optimization::optimizer::{FitnessFunction, OptimizationFitness};
-use crate::signal_analysis::hmm::hmm_matrices::{StartMatrix, TransitionMatrix};
 
 use super::super::constraints::OptimizationConstraint;
 use super::super::optimizer::{Optimizer, OptimizationError};
@@ -10,7 +9,7 @@ use super::super::set_of_var_subsets::*;
 use super::super::variable_subsets::*;
 use super::amalgam_parameters::*;
 
-
+#[derive(Clone)]
 pub struct AmalgamIdea<F, Fitness> 
 where 
 F: FitnessFunction<f64, Fitness>,
@@ -27,7 +26,7 @@ Fitness: OptimizationFitness
     // pub(super) latest_selection: Option<Vec<Vec<f64>>>,
     pub(super) best_solution: Option<(Vec<f64>, Fitness)>,
     pub(super) current_fitnesses: Vec<Fitness>,
-    pub(super) best_fitnesses: Vec<Fitness>,
+    pub(super) best_fitnesses: Vec<f64>,
     pub(super) stagnant_iterations: usize,
 
     pub(super) current_mean_shifts: Vec<DVector<f64>>,
@@ -75,6 +74,33 @@ Fitness: OptimizationFitness
             manual_pop_size: None
         }
     } 
+
+    pub fn reset(&mut self) {
+        self.max_iterations = None;
+    
+        self.parameters = None;
+    
+        self.fitness_function = None;
+    
+        self.subsets = None;
+    
+        self.initial_population = None;
+        self.current_population = Vec::new();
+        // self.latest_selection = None;
+        self.best_solution = None;
+    
+        self.current_fitnesses = Vec::new();
+        self.best_fitnesses = Vec::new();
+    
+        self.current_mean_shifts = Vec::new();
+    
+        self.stagnant_iterations = 0;
+    
+        self.c_mult = None;
+    
+        self.init_with_manual_distribution = false;
+        self.manual_pop_size = None;
+    }
 
     pub fn set_max_iterations(&mut self, max_iters: usize) {
         self.max_iterations = Some(max_iters);
@@ -271,8 +297,12 @@ Fitness: OptimizationFitness
         self.stagnant_iterations
     }
 
-    pub fn get_fitnesses(&self) -> &Vec<Fitness> {
+    pub fn get_fitnesses(&self) -> &Vec<f64> {
         &self.best_fitnesses
+    }
+
+    pub fn get_fitness_function(&self) -> Option<&F> {
+        self.fitness_function.as_ref()
     }
 
     pub fn check_initialization(&self) -> Result<(), AmalgamIdeaError> {
@@ -321,7 +351,7 @@ Fitness: OptimizationFitness
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AmalgamIdeaError {
     InitialValuesNotSet,
     FitnessFunctionNotSet,

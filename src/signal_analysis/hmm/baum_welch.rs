@@ -1,13 +1,16 @@
-use super::hmm_tools::{StateMatrix1D, StateMatrix2D, StateMatrix3D};
+use super::hmm_tools::{StateMatrix2D, StateMatrix3D};
 use super::optimization_tracker::{TerminationCriterium, StateCollapseHandle};
-use super::{state::*, viterbi};
+use super::state::*;
 use super::hmm_matrices::*;
 use super::hmm_instance::*;
 use super::optimization_tracker::*;
 
 use std::collections::HashSet;
 
-#[derive(Debug)]
+pub const BAUM_WELCH_MAX_ITERS_DEFAULT: usize = 500;
+pub const BAUM_WELCH_TERMINATION_DEFAULT: TerminationCriterium = TerminationCriterium::PlateauConvergence {epsilon: 1e-4, plateau_len: 20, max_iterations: Some(BAUM_WELCH_MAX_ITERS_DEFAULT as u32)};
+
+#[derive(Debug, Clone)]
 pub struct BaumWelch {
     num_states: u16,
 
@@ -43,6 +46,21 @@ impl BaumWelch {
             state_collapse_handle: StateCollapseHandle::Abort, // Default to aborting
         }
         
+    }
+
+    pub fn reset(&mut self) {
+        self.initial_states = None;
+        self.initial_start_matrix = None;
+        self.initial_transition_matrix = None;
+
+        self.final_states = None;
+        self.final_start_matrix = None;
+        self.final_transition_matrix = None;
+
+        self.final_log_likelihood = None;
+
+        // Assuming you want to reset `state_collapse_handle` to a default value
+        self.state_collapse_handle = StateCollapseHandle::Abort;
     }
 
     pub fn set_initial_states(&mut self, states: Vec<State>) -> Result<(), BaumWelchError>{
@@ -310,20 +328,20 @@ impl BaumWelch {
         Ok((self.final_states.as_ref().unwrap(), self.final_start_matrix.as_ref().unwrap(), self.final_transition_matrix.as_ref().unwrap()))
     }
 
-    pub fn get_states(&mut self) -> Option<&Vec<State>> {
+    pub fn get_states(&self) -> Option<&Vec<State>> {
         self.final_states.as_ref()
     }
 
-    pub fn get_start_matrix(&mut self) -> Option<&StartMatrix> {
+    pub fn get_start_matrix(&self) -> Option<&StartMatrix> {
         self.final_start_matrix.as_ref()
     }
 
-    pub fn get_transition_matrix(&mut self) -> Option<&TransitionMatrix> {
+    pub fn get_transition_matrix(&self) -> Option<&TransitionMatrix> {
         self.final_transition_matrix.as_ref()
     }
 
-    pub fn get_log_likelihood(&mut self) -> Option<&f64> {
-        self.final_log_likelihood.as_ref()
+    pub fn get_log_likelihood(&self) -> Option<f64> {
+        self.final_log_likelihood.clone()
     }
     
     pub fn take_states(&mut self) -> Option<Vec<State>> {
@@ -444,7 +462,7 @@ fn setup_with_sparse(
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BaumWelchError {
     // Initialization errors
     IncorrectNumberOfInitialStates { expected: u16, given: u16},
