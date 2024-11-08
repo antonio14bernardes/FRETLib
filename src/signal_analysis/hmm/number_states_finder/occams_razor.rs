@@ -1,7 +1,5 @@
-use super::{baum_welch::BaumWelch, hmm_instance::HMMInstance, optimization_tracker::{StateCollapseHandle, TerminationCriterium}, StartMatrix, State, TransitionMatrix, HMM};
-
 pub fn bayes_information_criterion_binary_search<F>
-(test_function: F,  min_n: usize, max_n: usize) -> (usize, f64)
+(test_function: F,  min_n: usize, max_n: usize) -> Result<(usize, f64), BayesInformationCriterionError>
 where
     F: Fn(usize) -> (f64, usize, usize), // log-likelihood, total num parameters (not necessarily the value we give the function), num samples
 {
@@ -32,11 +30,16 @@ where
         }
     }
 
-    (best_n, best_bic)
+    if best_bic == f64::MAX {return Err(BayesInformationCriterionError::FailedToExecuteTrialFunction)}
+
+    Ok((best_n, best_bic))
 }
 
 fn compute_bic(log_likelihood: f64, k: usize, n_samples: usize) -> f64 {
     -2.0 * log_likelihood + (k as f64) * (n_samples as f64).ln()
 }
 
-
+#[derive(Debug, Clone)]
+pub enum BayesInformationCriterionError {
+    FailedToExecuteTrialFunction,
+}

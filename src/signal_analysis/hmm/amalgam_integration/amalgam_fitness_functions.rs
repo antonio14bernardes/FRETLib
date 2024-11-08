@@ -1,12 +1,69 @@
-use super::super::super::super::optimization::amalgam_idea::*;
-use super::super::hmm_tools::{StateMatrix1D, StateMatrix2D, StateMatrix3D};
+use crate::optimization::optimizer::{FitnessFunction, OptimizationFitness};
+
 use super::super::optimization_tracker::{TerminationCriterium, StateCollapseHandle};
-use super::super::{state::*, viterbi};
+use super::super::state::*;
 use super::super::hmm_instance::*;
 use super::super::hmm_matrices::*;
 use super::super::baum_welch::*;
+use super::amalgam_modes::AmalgamFitness;
 
-use rand::{seq, thread_rng, Rng};
+use rand::{thread_rng, Rng};
+
+#[derive(Clone, Debug)]
+pub struct AmalgamHMMFitness {
+    fitness: f64,
+    states: Option<Vec<State>>,
+    start_matrix: Option<StartMatrix>,
+    transition_matrix: Option<TransitionMatrix>,
+}
+
+impl OptimizationFitness for AmalgamHMMFitness {
+    fn get_fitness(&self) -> f64 {
+        self.fitness
+    }
+}
+
+impl AmalgamHMMFitness {
+    pub fn get_states(&self) -> Option<&Vec<State>> {
+        self.states.as_ref()
+    }
+    pub fn get_start_matrix(&self) -> Option<&StartMatrix> {
+        self.start_matrix.as_ref()
+    }
+    pub fn get_transition_matrix(&self) -> Option<&TransitionMatrix> {
+        self.transition_matrix.as_ref()
+    }
+}
+
+#[derive(Clone)]
+pub struct AmalgamHMMFitnessFunction {
+    num_states: usize,
+    sequence_values: Vec<f64>,
+    fitness_type: AmalgamFitness,
+}
+
+impl AmalgamHMMFitnessFunction {
+    pub fn new(num_states: usize, sequence_values: &[f64], fitness_type: &AmalgamFitness) -> Self {
+        Self{
+            num_states,
+            sequence_values: sequence_values.to_vec(),
+            fitness_type: fitness_type.clone()}
+    }
+
+    pub fn get_fitness_type(&self) -> &AmalgamFitness {
+        &self.fitness_type
+    }
+}
+
+impl FitnessFunction<f64, AmalgamHMMFitness> for AmalgamHMMFitnessFunction {
+    fn evaluate(&self,individual: &[f64]) -> AmalgamHMMFitness {
+        match self.fitness_type {
+            AmalgamFitness::Direct => fitness_fn_direct(individual, self.num_states, &self.sequence_values),
+            AmalgamFitness::BaumWelch => fitness_fn_baum_welch(individual, self.num_states, &self.sequence_values),
+        }
+        
+    }
+}
 
 fn add_jitter_to_states(states: &Vec<State>, rng: &mut impl Rng) -> Vec<State> {
     let jittered_states= states
@@ -28,7 +85,7 @@ pub fn set_initial_states_with_jitter_baum(
     max_attempts: usize,
 ) -> Result<(), BaumWelchError> {
     let mut jittered_states: Vec<State> = states.clone();
-    for attempt in 0..max_attempts {
+    for _attempt in 0..max_attempts {
         // Attempt to set initial states
         match baum.set_initial_states(jittered_states.clone()) {
             Ok(()) => return Ok(()), // Success, return early
@@ -44,7 +101,7 @@ pub fn set_initial_states_with_jitter_baum(
 }
 
 
-pub fn fitness_fn_baum_welch(individual: &[f64], num_states: usize, sequence_values: &[f64]) -> f64 {
+pub fn fitness_fn_baum_welch(individual: &[f64], num_states: usize, sequence_values: &[f64]) -> AmalgamHMMFitness {
 
     let state_means = individual[..num_states].to_vec();
     let state_stds = individual[num_states..].to_vec();
@@ -60,10 +117,9 @@ pub fn fitness_fn_baum_welch(individual: &[f64], num_states: usize, sequence_val
     let initial_transition_matrix = TransitionMatrix::new_balanced(trial_states.len());
 
 
-    // Setup the Baum-Welch algorithm to obtain the transition matrices 
+    // Setup the Baum-Welch algorithm
     let mut baum = BaumWelch::new(num_states as u16);
 
-    // baum.set_initial_states(trial_states).unwrap();
     let mut rng = thread_rng();
     set_initial_states_with_jitter_baum(&mut baum, &trial_states, &mut rng, 10).unwrap();
     baum.set_initial_start_matrix(initial_start_matrix).unwrap();
@@ -75,21 +131,30 @@ pub fn fitness_fn_baum_welch(individual: &[f64], num_states: usize, sequence_val
     let output_res = baum.run_optimization(&sequence_values, termination_criterium);
 
     let fitness: f64;
+    let states: Option<Vec<State>>;
+    let start_matrix: Option<StartMatrix>;
+    let transition_matrix: Option<TransitionMatrix>;
+
 
     if let Ok(_) = output_res {
         fitness = baum.take_log_likelihood().unwrap();
+        states = Some(baum.take_states().unwrap());
+        start_matrix = Some(baum.take_start_matrix().unwrap());
+        transition_matrix = Some(baum.take_transition_matrix().unwrap());
     } else {
-        println!("Result: {:?}",output_res);
         fitness = f64::NEG_INFINITY;
+        states = None;
+        start_matrix = None;
+        transition_matrix = None;
     }
 
-    fitness
+    AmalgamHMMFitness{fitness, states, start_matrix, transition_matrix}
     
 }
 
 
 
-pub fn fitness_fn_direct(individual: &[f64], num_states: usize, sequence_values: &[f64]) -> f64 {
+pub fn fitness_fn_direct(individual: &[f64], num_states: usize, sequence_values: &[f64]) -> AmalgamHMMFitness {
     // Split the individual into the respective parts
     let (means, rest) = individual.split_at(num_states);
     let (stds, rest) = rest.split_at(num_states);
@@ -135,12 +200,20 @@ pub fn fitness_fn_direct(individual: &[f64], num_states: usize, sequence_values:
     // Run forward backward algorithm
     hmm_instance.run_alphas_scaled(sequence_values).unwrap();
 
-    let log_likelihood_option = hmm_instance.take_log_likelihood();
+    let log_likelihood_option = hmm_instance.take_log_likelihood();    
+    let log_likelihood: f64;
 
     if let Some(out) = log_likelihood_option {
-        out
+        log_likelihood = out;
     } else {
-        f64::NEG_INFINITY
+        log_likelihood = f64::NEG_INFINITY;
+    }
+
+    AmalgamHMMFitness {
+        fitness: log_likelihood,
+        states: Some(states),
+        start_matrix: Some(start_matrix),
+        transition_matrix: Some(transition_matrix),
     }
 
 }

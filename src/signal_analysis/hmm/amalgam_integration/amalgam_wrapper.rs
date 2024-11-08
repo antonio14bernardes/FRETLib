@@ -1,14 +1,12 @@
 use crate::optimization::amalgam_idea::{AmalgamIdea, AmalgamIdeaError};
 
-pub struct AmalgamWrapper<'a> {
-    amalgam: AmalgamIdea<'a>,
-}
+// pub struct AmalgamWrapper {
+//     amalgam: AmalgamIdea,
+// }
 
 
 
 #[derive(Debug)]
 pub enum AmalgamWrapperError {
-    AmalgamIdeaError{err: AmalgamIdeaError},
-    InvalidNumberOfStates,
-    InvalidSequence,
+    
 }

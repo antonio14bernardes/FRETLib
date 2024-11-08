@@ -10,7 +10,7 @@ use std::fmt::Debug;
 
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SetVarSubsets<T>
 where T: Clone,
 {
