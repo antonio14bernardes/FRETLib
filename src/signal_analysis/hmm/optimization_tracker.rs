@@ -117,7 +117,7 @@ pub enum TerminationCriterium {
     PlateauConvergenceAbsolute {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>}, // Same but differences are computed in absolute terms
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StateCollapseHandle {
     Abort, // Abort optimization if state collapses 
     RestartRandom {allowed_trials: u8}, // Restart optimizatiom with new random states

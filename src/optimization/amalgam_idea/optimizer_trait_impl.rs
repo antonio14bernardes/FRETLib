@@ -170,7 +170,7 @@ Fitness: OptimizationFitness
 
             let new_fit = self.best_solution.as_ref().unwrap().1.clone();
 
-            self.best_fitnesses.push(new_fit);
+            self.best_fitnesses.push(new_fit.get_fitness());
 
             let (best_sol, fit) = self.get_best_solution().unwrap();
             if iters % 20 == 0 {

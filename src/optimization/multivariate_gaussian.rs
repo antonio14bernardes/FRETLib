@@ -1,8 +1,8 @@
 use nalgebra::{DMatrix, DVector, Cholesky};
-use rand::{distributions, Rng, thread_rng};
+use rand::Rng;
 use rand_distr::{Normal, Distribution};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MultivariateGaussian {
     mean: DVector<f64>,     // Mean vector
     cov: DMatrix<f64>,      // Covariance matrix
@@ -209,7 +209,7 @@ pub enum CovMatrixType {
     Diagonal,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MultivariateGaussianError {
     InvalidCovMatrix,
     InvalidFlatCovMatrix,
@@ -264,7 +264,7 @@ fn get_cholesky_stable(cov: &mut DMatrix<f64>) -> Result<DMatrix<f64>, Multivari
             // If Cholesky fails, add jitter and try again
             let jitter = 1e-6;
             add_jitter_to_cov_matrix(cov, jitter); 
-            let (scaled_cov_with_jitter, scaling_factor_jitter) = scale_matrix(cov);
+            let (scaled_cov_with_jitter, _scaling_factor_jitter) = scale_matrix(cov);
 
             let scaled_cholesky = Cholesky::new(scaled_cov_with_jitter.clone())
             .ok_or(MultivariateGaussianError::InvalidCovMatrix)?.l();
@@ -315,6 +315,8 @@ fn get_cholesky_and_inv_stable(cov: &mut DMatrix<f64>) -> Result<[DMatrix<f64>;2
 
 #[cfg(test)]
 mod tests {
+    use rand::thread_rng;
+
     use super::*;
 
     #[test]
@@ -375,7 +377,7 @@ mod tests {
 
         // Ensure the mean and covariance are correct
         let expected_mean = DVector::from_vec(vec![1.0, 2.0]);  // This is the mean of the given data points
-        let (mean, cov) = gaussian.get_mean_cov();
+        let (mean, _cov) = gaussian.get_mean_cov();
 
         assert_eq!(*mean, expected_mean, "Computed mean is incorrect");
 
@@ -476,7 +478,7 @@ mod tests {
             sampled.push(new_sample);
         }
 
-        let mut as_refs: Vec<&[f64]> = sampled.iter().map(|vec| vec.as_slice()).collect();
+        let as_refs: Vec<&[f64]> = sampled.iter().map(|vec| vec.as_slice()).collect();
 
         // Compute distribution based on the samples
         let new_gaussian = MultivariateGaussian::from_observations(&as_refs, &CovMatrixType::Full).unwrap();

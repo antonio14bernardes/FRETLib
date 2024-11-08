@@ -1,7 +1,5 @@
-use nalgebra::constraint;
-
-use super::{amalgam_fitness_functions::*, amalgam_wrapper::AmalgamWrapperError};
-use crate::optimization::{amalgam_idea::{AmalgamIdea, AmalgamIdeaError, AmalgamIdeaFitness}, constraints::OptimizationConstraint};
+use super::amalgam_fitness_functions::*;
+use crate::{optimization::{amalgam_idea::AmalgamIdea, constraints::OptimizationConstraint}, signal_analysis::hmm::learning::learner_trait::HMMLearnerError};
 
 
 // Max noise constraits are obtained by dividing the range of values by the number of states
@@ -9,19 +7,26 @@ use crate::optimization::{amalgam_idea::{AmalgamIdea, AmalgamIdeaError, AmalgamI
 const MAX_NOISE_MULT: f64 = 0.5;
 const MIN_NOISE_MULT: f64 = 1e-2;
 
+pub const ITER_MEMORY_DEFAULT: bool = true;
+pub const AMALGAM_FITNESS_DEFAULT: AmalgamFitness = AmalgamFitness::Direct;
+pub const AMALGAM_DEPENDENCY_DEFAULT: AmalgamDependencies = AmalgamDependencies::AllIndependent;
+pub const AMALGAM_MAX_ITERS_DEFAULT: usize = 1000;
+
+#[derive(Debug, Clone)]
 pub enum AmalgamDependencies {
     AllIndependent, // Recommended
     StateCompact,
     ValuesDependent,
 }
 
+#[derive(Debug, Clone)]
 pub enum AmalgamFitness {
     Direct, // Recommended
     BaumWelch
 }
 
-pub fn get_variable_subsets(num_states: usize, dependence_type: &AmalgamDependencies, fitness_type: &AmalgamFitness) -> Result<Vec<Vec<usize>>, AmalgamWrapperError> {
-    if num_states == 0 {return Err(AmalgamWrapperError::InvalidNumberOfStates)};
+pub fn get_variable_subsets(num_states: usize, dependence_type: &AmalgamDependencies, fitness_type: &AmalgamFitness) -> Result<Vec<Vec<usize>>, HMMLearnerError> {
+    if num_states == 0 {return Err(HMMLearnerError::InvalidNumberOfStates)};
 
     // All state noises and values are independent. Start and transition matrix are still row-wise dependent
     let mut dependencies:Vec<Vec<usize>> = Vec::new();
@@ -71,8 +76,8 @@ pub fn get_variable_subsets(num_states: usize, dependence_type: &AmalgamDependen
     Ok(dependencies)
 }
 
-pub fn get_constraints(num_states: usize, sequence_values: &[f64], dependence_type: &AmalgamDependencies, fitness_type: &AmalgamFitness) -> Result<Vec<OptimizationConstraint<f64>>, AmalgamWrapperError> {
-    if num_states == 0 {return Err(AmalgamWrapperError::InvalidNumberOfStates)};
+pub fn get_constraints(num_states: usize, sequence_values: &[f64], dependence_type: &AmalgamDependencies, fitness_type: &AmalgamFitness) -> Result<Vec<OptimizationConstraint<f64>>, HMMLearnerError> {
+    if num_states == 0 {return Err(HMMLearnerError::InvalidNumberOfStates)};
     let mut constraints: Vec<OptimizationConstraint<f64>> = Vec::new();
 
     let min_value= sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
@@ -119,48 +124,36 @@ pub fn get_constraints(num_states: usize, sequence_values: &[f64], dependence_ty
     Ok(constraints)
 }
 
-pub fn get_amalgam_object<'a>(iter_memory: bool, num_states: usize, sequence_values: &[f64], dependence_type: &AmalgamDependencies, fitness_type: &AmalgamFitness) -> Result<AmalgamIdea<'a>, AmalgamWrapperError> {
-    let mut amalgam: AmalgamIdea;
+pub fn get_amalgam_object(
+    iter_memory: bool,
+    num_states: usize,
+    sequence_values: &[f64],
+    dependence_type: &AmalgamDependencies,
+    fitness_type: &AmalgamFitness
+) -> Result<AmalgamIdea<AmalgamHMMFitnessFunction, AmalgamHMMFitness>, HMMLearnerError>
 
-    match fitness_type {
-        AmalgamFitness::BaumWelch => {
-            let problem_size = 2 * num_states;
-            amalgam = AmalgamIdea::new(problem_size, iter_memory);
+{
+    
 
-            let sequence_clone = sequence_values.to_vec();
+    let prob_size = match fitness_type {
+        AmalgamFitness::BaumWelch => 2 * num_states,
+        AmalgamFitness::Direct => 3 * num_states + num_states * num_states,
+    };
 
-            let fitness_function_closure = 
-            move |individual: &[f64]| {
-                fitness_fn_baum_welch(individual, num_states, &sequence_clone)
-            };
-            
-            amalgam.set_fitness_function(fitness_function_closure);
-        }
+    let mut amalgam: AmalgamIdea<AmalgamHMMFitnessFunction, AmalgamHMMFitness> = AmalgamIdea::new(prob_size, iter_memory);
 
-        AmalgamFitness::Direct => {
-            let problem_size = 3 * num_states + num_states * num_states;
-            amalgam = AmalgamIdea::new(problem_size, iter_memory);
-
-            let sequence_clone = sequence_values.to_vec();
-
-            let fitness_function_closure = 
-            move |individual: &[f64]| {
-                fitness_fn_direct(individual, num_states, &sequence_clone)
-            };
-            
-            amalgam.set_fitness_function(fitness_function_closure);
-        }
-    }
+    let fitness_fn = AmalgamHMMFitnessFunction::new(num_states, sequence_values, fitness_type);
+    amalgam.set_fitness_function(fitness_fn);
 
     // Get the subsets
     let subsets= get_variable_subsets(num_states, dependence_type, fitness_type)?;
     amalgam.set_dependency_subsets(subsets)
-    .map_err(|err| AmalgamWrapperError::AmalgamIdeaError { err })?;
+    .map_err(|err| HMMLearnerError::AmalgamIdeaError { err })?;
 
     // Get the constraints
     let constraints = get_constraints(num_states, sequence_values, dependence_type, fitness_type)?;
     amalgam.set_constraints(constraints)
-    .map_err(|err| AmalgamWrapperError::AmalgamIdeaError { err })?;
+    .map_err(|err| HMMLearnerError::AmalgamIdeaError { err })?;
 
     Ok(amalgam)
 }
@@ -391,7 +384,7 @@ mod tests {
         let max_value = *sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
         let range = max_value - min_value;
         let max_noise = range / (num_states as f64) * MAX_NOISE_MULT;
-        let min_noise = max_noise * MIN_NOISE_MULT;
+        let _min_noise = max_noise * MIN_NOISE_MULT;
         // Check state values and noises constraints
         match &constraints[0] {
             OptimizationConstraint::MaxMinValue { max, min } => {

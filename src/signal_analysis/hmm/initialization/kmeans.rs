@@ -1,7 +1,14 @@
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
-pub fn k_means_1D(data: &[f64], k: usize, max_iterations: usize, tolerance: f64) -> (Vec<f64>, Vec<usize>) {
+use super::eval_clusters::ClusterEvaluationMethod;
+
+pub const KMEANS_MAX_ITERS_DEFAULT: usize = 500;
+pub const KMEANS_TOLERANCE_DEFAULT: f64 = 1e-5;
+pub const KMEANS_NUM_TRIES_DEFAULT: usize = 5;
+pub const KMEANS_EVAL_METHOD_DEFAULT: ClusterEvaluationMethod = ClusterEvaluationMethod::Silhouette;
+
+pub fn k_means_1_d(data: &[f64], k: usize, max_iterations: usize, tolerance: f64) -> (Vec<f64>, Vec<usize>) {
     // Step 1: Initialize random cluster centers
     let mut rng = thread_rng();
     let mut centers: Vec<f64> = data.choose_multiple(&mut rng, k).cloned().collect();
@@ -65,17 +72,17 @@ pub fn k_means_1D(data: &[f64], k: usize, max_iterations: usize, tolerance: f64)
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::k_means_1_d;
 
     #[test]
-    fn test_k_means_1D() {
+    fn test_k_means_1_d() {
         let data = vec![1.0, 1.1, 1.2, 5.0, 5.1, 5.2, 10.0, 10.1, 10.2];
         let k = 3;
         let max_iterations = 100;
         let tolerance = 1e-4;
 
         // Run the K-means algorithm on the test data
-        let (centers, assignments) = k_means_1D(&data, k, max_iterations, tolerance);
+        let (centers, assignments) = k_means_1_d(&data, k, max_iterations, tolerance);
 
         // Verify the correct number of cluster centers
         assert_eq!(centers.len(), k, "Number of centers should be equal to k");

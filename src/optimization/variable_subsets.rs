@@ -1,17 +1,12 @@
 use super::multivariate_gaussian::*;
 use super::constraints::*;
-use nalgebra::constraint;
 use nalgebra::{DMatrix, DVector};
-use rand::distributions;
 use rand::Rng;
-use rand_distr::uniform::SampleUniform;
-use core::num;
-use std::collections::HashSet;
 use std::ops::{Add, Sub, Div, Mul};
 use std::fmt::Debug;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VariableSubset<T>
 where
     T: Clone,
@@ -358,7 +353,7 @@ where
     corrected_population
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum VariableSubsetError {
     IncompatiblePopulationShape,
     PopulationEmpty,
@@ -405,7 +400,7 @@ mod tests_subsets {
         let mut subset = VariableSubset::new(&indices);
 
         let constraint = OptimizationConstraint::SumTo { sum: 1.0 };
-        subset.set_constraint(constraint);
+        subset.set_constraint(constraint).unwrap();
 
         if let Some(OptimizationConstraint::SumTo { sum }) = subset.constraint {
             assert_eq!(sum, 1.0, "Constraint sum was not set correctly.");
@@ -528,7 +523,7 @@ mod tests_subsets {
 
         // Set the SumTo constraint
         let constraint = OptimizationConstraint::SumTo { sum: 10.0 };
-        subset.set_constraint(constraint);
+        subset.set_constraint(constraint).unwrap();
 
         // Initialize the population with the constraint
         subset.initialize_random_population(pop_size, &mut rng, None).unwrap();
@@ -554,7 +549,7 @@ mod tests_subsets {
             max: vec![4.0, 5.0],
             min: vec![1.0, 2.0],
         };
-        subset.set_constraint(constraint);
+        subset.set_constraint(constraint).unwrap();
 
         // Initialize the population with the constraints
         subset.initialize_random_population(pop_size, &mut rng, None).unwrap();
@@ -573,7 +568,6 @@ mod tests_subsets {
         let mut subset = VariableSubset::new(&indices);
 
         let pop_size = 6;
-        let prob_size = 2;
         let mut rng = thread_rng();
 
         // Custom range: values between [10.0, 20.0]
