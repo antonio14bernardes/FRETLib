@@ -1,7 +1,9 @@
-use learning::{learner_trait::LearnerType, learner_wrappers::{AMALGAM_SETUP_DEFAULT, BAUM_WELCH_SETUP_DEFAULT}};
+use learning::learner_trait::LearnerType;
 use std::fmt::Debug;
 use super::{learner_trait::{HMMLearnerError, HMMLearnerTrait, LearnerSpecificInitialValues, LearnerSpecificSetup}, learner_wrappers::{AmalgamHMMWrapper, BaumWelchWrapper}};
 use crate::signal_analysis::hmm::*;
+
+pub const LEARNER_TYPE_DEFAULT: LearnerType = LearnerType::BaumWelch;
 
 #[derive(Debug, Clone)]
 pub struct HMMLearner {
@@ -10,6 +12,12 @@ pub struct HMMLearner {
 }
 
 impl HMMLearner {
+    pub fn new_default() -> Self {
+        Self {
+            learner:Box::new(BaumWelchWrapper::new()),
+            learner_type: LearnerType::BaumWelch,
+        }
+    }
     pub fn new(learner_type: LearnerType) -> Self {
 
         let learner: Box<dyn HMMLearnerTrait>;

@@ -9,10 +9,6 @@
 * DOI: [10.1529/biophysj.106.082487](https://doi.org/10.1529/biophysj.106.082487)
 **********/
 
-use rand::Rng;
-use rand_distr::{Distribution, Normal};
-
-
 pub mod hmm_tools;
 pub mod state;
 pub mod hmm_matrices;
@@ -25,13 +21,14 @@ pub mod initialization;
 pub mod amalgam_integration;
 pub mod number_states_finder;
 pub mod learning;
+pub mod analysis;
 pub mod hmm_struct;
 
 use state::*;
 use hmm_matrices::*; 
 
 use initialization::hmm_initializer::{HMMInitializer, HMMInitializerError};
-use learning::{hmm_learner::HMMLearner, learner_trait::{HMMLearnerTrait, HMMLearnerError}};
+use learning::{hmm_learner::HMMLearner, learner_trait::HMMLearnerError};
 use number_states_finder::hmm_num_states_finder::{HMMNumStatesFinder, HMMNumStatesFinderError};
 
 pub use initialization::hmm_initializer::{self, StateValueInitMethod, StateNoiseInitMethod, StartMatrixInitMethod,TransitionMatrixInitMethod, InitializationMethods};

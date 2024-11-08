@@ -9,7 +9,7 @@ use super::hmm_matrices::*;
 use super::viterbi::*;
 use super::probability_matrices::*;
 
-pub const VALUE_SEQUENCE_THRESHOLD: f64 = 1e-7;
+pub const VALUE_SEQUENCE_THRESHOLD: f64 = 1e-10;
 
 pub struct HMMInstance<'a> {
     states: Option<&'a [State]>,
