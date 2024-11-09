@@ -5,8 +5,6 @@ use super::occams_razor::*;
 
 pub const MAX_K_DEFAULT: usize = 10;
 pub const MIN_K_DEFAULT: usize = 1;
-pub const NUM_STATES_FINDER_DEFAULT_STRAT: NumStatesFindStrat = NumStatesFindStrat::KMeansClustering{num_tries: None, max_iters: None, tolerance: None, method: None};
-
 
 #[derive(Debug, Clone)]
 pub struct HMMNumStatesFinder {
@@ -18,7 +16,7 @@ pub struct HMMNumStatesFinder {
 impl HMMNumStatesFinder {
     pub fn new() -> Self{
         
-        HMMNumStatesFinder{strategy: NUM_STATES_FINDER_DEFAULT_STRAT, max_k: MAX_K_DEFAULT, min_k: MIN_K_DEFAULT}
+        HMMNumStatesFinder{strategy: NumStatesFindStrat::default(), max_k: MAX_K_DEFAULT, min_k: MIN_K_DEFAULT}
     }
 
     pub fn set_strategy(&mut self, strategy: NumStatesFindStrat) -> Result<(), HMMNumStatesFinderError> {
@@ -84,6 +82,14 @@ pub enum NumStatesFindStrat {
 }
 
 impl NumStatesFindStrat {
+    pub fn default() -> Self {
+        NumStatesFindStrat::KMeansClustering{
+            num_tries: Some(KMEANS_NUM_TRIES_DEFAULT),
+            max_iters: Some(KMEANS_MAX_ITERS_DEFAULT),
+            tolerance: Some(KMEANS_TOLERANCE_DEFAULT),
+            method: Some(ClusterEvaluationMethod::default())
+        }
+    }
     fn kmeans_clustering_strat(
         sequence_values: &[f64],
         max_k: usize,

@@ -117,6 +117,12 @@ pub enum TerminationCriterium {
     PlateauConvergenceAbsolute {epsilon: f64, plateau_len: u16, max_iterations: Option<u32>}, // Same but differences are computed in absolute terms
 }
 
+impl TerminationCriterium {
+    pub fn default() -> Self {
+        TerminationCriterium::PlateauConvergence { epsilon: 1e-5, plateau_len: 20, max_iterations: Some(500) }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum StateCollapseHandle {
     Abort, // Abort optimization if state collapses 

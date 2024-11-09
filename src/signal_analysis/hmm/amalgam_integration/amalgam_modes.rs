@@ -7,7 +7,7 @@ use crate::{optimization::{amalgam_idea::AmalgamIdea, constraints::OptimizationC
 const MAX_NOISE_MULT: f64 = 0.5;
 const MIN_NOISE_MULT: f64 = 1e-2;
 
-pub const ITER_MEMORY_DEFAULT: bool = true;
+pub const AMALGAM_ITER_MEMORY_DEFAULT: bool = true;
 pub const AMALGAM_FITNESS_DEFAULT: AmalgamFitness = AmalgamFitness::Direct;
 pub const AMALGAM_DEPENDENCY_DEFAULT: AmalgamDependencies = AmalgamDependencies::AllIndependent;
 pub const AMALGAM_MAX_ITERS_DEFAULT: usize = 1000;

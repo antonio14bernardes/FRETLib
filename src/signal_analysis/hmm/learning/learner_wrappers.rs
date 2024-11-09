@@ -2,20 +2,14 @@ use rand::thread_rng;
 
 use crate::optimization::amalgam_idea::AmalgamIdea;
 use crate::signal_analysis::hmm::amalgam_integration::amalgam_fitness_functions::{AmalgamHMMFitness, AmalgamHMMFitnessFunction};
-use crate::signal_analysis::hmm::amalgam_integration::amalgam_modes::{get_amalgam_object, AMALGAM_DEPENDENCY_DEFAULT, AMALGAM_FITNESS_DEFAULT, AMALGAM_MAX_ITERS_DEFAULT, ITER_MEMORY_DEFAULT};
+use crate::signal_analysis::hmm::amalgam_integration::amalgam_modes::{get_amalgam_object, AMALGAM_DEPENDENCY_DEFAULT, AMALGAM_FITNESS_DEFAULT, AMALGAM_ITER_MEMORY_DEFAULT, AMALGAM_MAX_ITERS_DEFAULT};
 use crate::signal_analysis::hmm::baum_welch::{BaumWelch, BAUM_WELCH_TERMINATION_DEFAULT};
 use crate::signal_analysis::hmm::optimization_tracker::{StateCollapseHandle, TerminationCriterium};
 use crate::signal_analysis::hmm::amalgam_integration::amalgam_fitness_functions::set_initial_states_with_jitter_baum;
 use crate::signal_analysis::hmm::{StartMatrix, State, TransitionMatrix};
 use crate::optimization::optimizer::{OptimizationFitness, Optimizer};
 
-use super::learner_trait::{HMMLearnerTrait, HMMLearnerError, LearnerSpecificSetup, LearnerSpecificInitialValues};
-
-pub const AMALGAM_SETUP_DEFAULT: LearnerSpecificSetup =
-LearnerSpecificSetup::AmalgamIdea 
-{ iter_memory: Some(ITER_MEMORY_DEFAULT),
-    dependence_type: Some(AMALGAM_DEPENDENCY_DEFAULT),
-    fitness_type: Some(AMALGAM_FITNESS_DEFAULT), max_iterations: Some(AMALGAM_MAX_ITERS_DEFAULT) };
+use super::learner_trait::{HMMLearnerError, HMMLearnerTrait, LearnerSpecificInitialValues, LearnerSpecificSetup, LearnerType};
 
 #[derive(Debug, Clone)]
 pub struct AmalgamHMMWrapper {
@@ -26,7 +20,7 @@ pub struct AmalgamHMMWrapper {
 impl AmalgamHMMWrapper {
     pub fn new() -> Self { 
         let mut out = Self{amalgam: None, setup_data: None};
-        out.setup_learner(AMALGAM_SETUP_DEFAULT).unwrap();
+        out.setup_learner(LearnerSpecificSetup::default(&LearnerType::AmalgamIdea)).unwrap();
 
         out
     }
@@ -41,7 +35,7 @@ impl HMMLearnerTrait for AmalgamHMMWrapper {
             _ => {return Err(HMMLearnerError::InvalidSetupType)}
         }
         
-        self.setup_data = Some(specific_setup);
+        self.setup_data = Some(specific_setup.handle_nones()); // Removes any nones from the setup
         
         Ok(())
     }
@@ -65,17 +59,19 @@ impl HMMLearnerTrait for AmalgamHMMWrapper {
 
         match self.setup_data.as_ref().unwrap() {
             LearnerSpecificSetup::AmalgamIdea { iter_memory, dependence_type, fitness_type, max_iterations } => {
-                let iter_memory = iter_memory.unwrap_or(ITER_MEMORY_DEFAULT);
-                let dependence_type = dependence_type.as_ref().unwrap_or(&AMALGAM_DEPENDENCY_DEFAULT).clone();
-                let fitness_type = fitness_type.as_ref().unwrap_or(&AMALGAM_FITNESS_DEFAULT).clone();
+                let iter_memory = iter_memory.unwrap();
+                let dependence_type = dependence_type.as_ref().unwrap().clone();
+                let fitness_type = fitness_type.as_ref().unwrap().clone();
+                let max_iters = max_iterations.unwrap();
 
                 // Get the object
                 amalgam = get_amalgam_object(iter_memory, num_states, sequence_values, &dependence_type, &fitness_type)?;
                 
-                // If specified, set max number of iterations
-                if let Some(max_iters) = max_iterations {
-                    amalgam.set_max_iterations(*max_iters);
+                // If max_iters is not usize::max, set the max_iters
+                if max_iters != usize::MAX {
+                    amalgam.set_max_iterations(max_iters);
                 }
+                
                 
             }
 

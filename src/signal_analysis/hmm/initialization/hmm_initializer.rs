@@ -2,7 +2,7 @@ use core::f64;
 
 use nalgebra::{DMatrix, DVector};
 
-use crate::signal_analysis::hmm::amalgam_integration::amalgam_modes::{AmalgamDependencies, AmalgamFitness, AMALGAM_DEPENDENCY_DEFAULT, AMALGAM_FITNESS_DEFAULT};
+use crate::signal_analysis::hmm::amalgam_integration::amalgam_modes::{AmalgamDependencies, AmalgamFitness};
 use crate::signal_analysis::hmm::learning::learner_trait::{LearnerSpecificInitialValues, LearnerSpecificSetup};
 use crate::signal_analysis::hmm::{StateError, StartMatrix, TransitionMatrix, hmm_instance::*};
 
@@ -24,10 +24,10 @@ pub struct InitializationMethods {
 impl InitializationMethods {
     pub fn new() -> Self {
         Self {
-            state_values_method: None,
-            state_noises_method: None,
-            start_matrix_method: None,
-            transition_matrix_method: None,
+            state_values_method: Some(StateValueInitMethod::default()),
+            state_noises_method: Some(StateNoiseInitMethod::default()),
+            start_matrix_method: Some(StartMatrixInitMethod::default()),
+            transition_matrix_method: Some(TransitionMatrixInitMethod::default())
         }
     }
 }
@@ -78,13 +78,21 @@ impl HMMInitializer {
 
             if num_tries_invalid || max_iters_invalid {return Err(HMMInitializerError::InvalidInput)}
         }
-        self.state_values_method = method;
+        
+        self.state_values_method = StateValueInitMethod::handle_nones(method);
 
         Ok(())
     }
 
-    pub fn set_state_noises_method(&mut self, method: StateNoiseInitMethod) {
-        self.state_noises_method = method;
+    pub fn set_state_noises_method(&mut self, method: StateNoiseInitMethod) -> Result<(), HMMInitializerError>{
+        if let StateNoiseInitMethod::Sparse { mult } = method {
+            if mult.map(|value| value <= 0.0).unwrap_or(false) {
+                return Err(HMMInitializerError::InvalidInput);
+            }
+        }
+        self.state_noises_method = StateNoiseInitMethod::handle_nones(method);
+
+        Ok(())
     }
 
     pub fn set_start_matrix_method(&mut self, method: StartMatrixInitMethod) {
@@ -200,13 +208,15 @@ fn state_and_noise_dists(
     state_noise_std: Option<Vec<f64>>,
 ) -> Option<(Vec<DVector<f64>>, Vec<DMatrix<f64>>)> {
 
+    let learner_setup = LearnerSpecificSetup::handle_nones(learner_setup.clone());
+
     match learner_setup {
         LearnerSpecificSetup::AmalgamIdea { dependence_type, .. } => {
             let mut means: Vec<DVector<f64>> = Vec::new();
             let mut covs: Vec<DMatrix<f64>> = Vec::new();
 
             // Check dependency type to see how state values and noises will be set
-            match dependence_type.as_ref().unwrap_or(&AMALGAM_DEPENDENCY_DEFAULT) {
+            match dependence_type.as_ref().unwrap() {
                 AmalgamDependencies::AllIndependent => {
                     // First set the states
                     state_values.iter()
@@ -259,13 +269,16 @@ fn start_and_transition_matrices_dists(
     transition_matrix: TransitionMatrix,
     transition_matrix_cov_diags: Option<Vec<Vec<f64>>>,
 ) -> Option<(Vec<DVector<f64>>, Vec<DMatrix<f64>>)> {
+
+    let learner_setup = LearnerSpecificSetup::handle_nones(learner_setup.clone());
+
     match learner_setup {
         LearnerSpecificSetup::AmalgamIdea { fitness_type, .. } => {
             let mut means: Vec<DVector<f64>> = Vec::new();
             let mut covs: Vec<DMatrix<f64>> = Vec::new();
 
             // Check dependency type to see how state values and noises will be set
-            match fitness_type.as_ref().unwrap_or(&AMALGAM_FITNESS_DEFAULT) {
+            match fitness_type.as_ref().unwrap() {
                 AmalgamFitness::Direct => {
                     // Set the start matrix means and covs
                     means.push(start_matrix_to_means(&start_matrix));
@@ -347,6 +360,33 @@ pub enum StateValueInitMethod {
 }
 
 impl StateValueInitMethod {
+    pub fn default() -> Self {
+        StateValueInitMethod::KMeansClustering { 
+            max_iters: Some(KMEANS_MAX_ITERS_DEFAULT),
+            tolerance: Some(KMEANS_TOLERANCE_DEFAULT),
+            num_tries: Some(KMEANS_NUM_TRIES_DEFAULT),
+            eval_method: Some(KMEANS_EVAL_METHOD_DEFAULT) 
+        }
+    }
+
+    pub fn handle_nones(self) -> Self {
+        match self {
+            Self::KMeansClustering { max_iters, tolerance, num_tries, eval_method } => {
+                let max_iters_new = max_iters.unwrap_or(KMEANS_MAX_ITERS_DEFAULT);
+                let tolerance_new = tolerance.unwrap_or(KMEANS_TOLERANCE_DEFAULT);
+                let num_tries_new = num_tries.unwrap_or(KMEANS_NUM_TRIES_DEFAULT);
+                let eval_method_new = eval_method.unwrap_or(KMEANS_EVAL_METHOD_DEFAULT);
+
+                Self::KMeansClustering { 
+                    max_iters: Some(max_iters_new),
+                    tolerance: Some(tolerance_new),
+                    num_tries: Some(num_tries_new),
+                    eval_method: Some(eval_method_new) }
+            }
+            Self::Random => {self}
+            Self::Sparse => {self}
+        }
+    }
     pub fn get_state_values(&self, num_states: usize, sequence_values: &[f64], dist: bool) -> Result<(Vec<f64>, Option<Vec<f64>>), HMMInitializerError>{
         check_validity(num_states, sequence_values)?;
 
@@ -445,6 +485,18 @@ pub enum StateNoiseInitMethod {
 }
 
 impl StateNoiseInitMethod {
+    pub fn default() -> Self {
+        Self::Sparse { mult: Some(STATE_NOISE_MULT) }
+    }
+
+    pub fn handle_nones(self) -> Self {
+        match self {
+            Self::Sparse { mult } => {
+                Self::Sparse { mult: Some(mult.unwrap_or(STATE_NOISE_MULT)) }
+            }
+        }
+    }
+
     pub fn get_state_noises(&self, num_states: usize, sequence_values: &[f64], dist: bool) -> Result<(Vec<f64>, Option<f64>), HMMInitializerError> {
         check_validity(num_states, sequence_values)?;
 
@@ -475,6 +527,9 @@ pub enum StartMatrixInitMethod {
 }
 
 impl StartMatrixInitMethod {
+    pub fn default() -> Self  {
+        StartMatrixInitMethod::Balanced{}
+    }
     pub fn get_start_matrix(&self, num_states: usize, dist: bool) -> Result<(StartMatrix, Option<Vec<f64>>), HMMInitializerError> {
         if num_states == 0 {return Err(HMMInitializerError::InvalidNumberOfStates)}
         let start_matrix: StartMatrix;
@@ -507,6 +562,9 @@ pub enum TransitionMatrixInitMethod {
 }
 
 impl TransitionMatrixInitMethod {
+    pub fn default() -> Self {
+        TransitionMatrixInitMethod::Balanced
+    }
     pub fn get_transition_matrix(&self, num_states: usize, dist: bool) -> Result<(TransitionMatrix,Option<Vec<Vec<f64>>>), HMMInitializerError> {
         if num_states == 0 {return Err(HMMInitializerError::InvalidNumberOfStates)}
         let transition_matrix: TransitionMatrix;
