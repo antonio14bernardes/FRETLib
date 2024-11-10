@@ -37,4 +37,3 @@ pub use number_states_finder::hmm_num_states_finder::NumStatesFindStrat;
 
 
 pub use amalgam_integration::amalgam_modes::{AmalgamDependencies, AmalgamFitness};
-
