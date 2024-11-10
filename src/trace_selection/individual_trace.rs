@@ -1,5 +1,5 @@
 use std::hash::{Hash, Hasher};
-use super::filters::*;
+use super::tools::*;
 
 #[derive(Debug, Clone)]
 pub struct IndividualTrace {
@@ -35,22 +35,33 @@ impl IndividualTrace {
         self.values.len()
     }
 
-    pub fn detect_photobleaching_event(&self, threshold: f64, window_size: usize) -> Option<usize> {
-        
+    pub fn detect_photobleaching_events(&self, threshold: f64, window_size: usize) -> Vec<usize> {
         // Apply median filter
         let filtered_values = median_filter(&self.values, window_size);
         // Compute gradient
         let gradient = compute_gradient(&filtered_values);
+        
         // Find noise threshold
         let [_, std] = compute_mean_and_std(&gradient);
         let noise_threshold = threshold * std;
-        // Find photobleaching event (significant negative drop)
-        for (i, &grad) in gradient.iter().enumerate().rev() {
+    
+        let mut photobleaching_events = Vec::new();
+        let mut in_event = false;
+    
+        for (i, &grad) in gradient.iter().enumerate() {
             if grad < -noise_threshold {
-                return Some(i); // Return the index where the photobleaching event occurs
+                if !in_event {
+                    // Start of a new photobleaching event
+                    photobleaching_events.push(i);
+                    in_event = true;
+                }
+            } else {
+                // End of the current photobleaching event
+                in_event = false;
             }
         }
-        None // No photobleaching event detected
+    
+        photobleaching_events // Return the vector of unique photobleaching event start indices
     }
 
     pub fn snr(&self) -> Result<f64, IndividualTraceError> {
@@ -59,31 +70,52 @@ impl IndividualTrace {
         Ok(compute_snr(&self.values))
     }
 
-    pub fn snr_before_after_bleaching(&self, pb_event: usize) -> Result<[f64; 2], IndividualTraceError>{
-
-        if pb_event >= self.values.len() {
-            return Err(IndividualTraceError::InvalidTimeStepINdex);
-        }
-
-        if pb_event > self.values.len() - 3 {
+    pub fn snr_before_after_bleaching(&self, pb_event: Option<usize>) -> Result<[Option<f64>; 2], IndividualTraceError> {
+        if self.values.len() < 2 {
             return Err(IndividualTraceError::NotEnoughValues);
         }
-
-        let before = compute_snr(&self.values[0..pb_event]);
-        let after = compute_snr(&self.values[pb_event + 1 .. self.values.len()]);
-
-        Ok([before, after])
+    
+        if let Some(pb_event) = pb_event {
+            if pb_event >= self.values.len() - 2 {
+                return Err(IndividualTraceError::InvalidTimeStepINdex);
+            }
+            if pb_event < 2 {
+                return Err(IndividualTraceError::NotEnoughValues);
+            }
+    
+            // Calculate mean and standard deviation for values before the photobleaching event
+            let [mean_before, std_before] = compute_mean_and_std(&self.values[0..pb_event]);
+    
+            // Calculate standard deviation after the bleaching event
+            let std_after = compute_mean_and_std(&self.values[pb_event + 1..self.values.len()])[1];
+    
+            // Calculate SNRs based on mean_before
+            let snr_before = mean_before / std_before;
+            let snr_after = mean_before / std_after;
+    
+            Ok([Some(snr_before), Some(snr_after)])
+        } else {
+            // No photobleaching event: calculate mean and std for the entire sequence
+            let [mean_before, std_before] = compute_mean_and_std(&self.values[..]);
+            let snr_before = mean_before / std_before;
+    
+            Ok([Some(snr_before), None])
+        }
     }
 
-    pub fn noise_post_bleaching(&self, pb_event: usize) -> Result<f64, IndividualTraceError> {
+    pub fn noise_post_bleaching(&self, pb_event: Option<usize>) -> Result<Option<f64>, IndividualTraceError> {
 
-        if pb_event >= self.values.len() - 1{
+        if pb_event.is_none() {return Ok(None)}
+
+        let pb_event = pb_event.unwrap();
+
+        if pb_event >= self.values.len() - 2{
             return Err(IndividualTraceError::InvalidTimeStepINdex);
         }
 
         let [_, std] = compute_mean_and_std(&self.values[pb_event + 1 .. self.values.len()]);
 
-        Ok(std)
+        Ok(Some(std))
     }
 
     pub fn first_value(&self) -> f64 {
@@ -99,6 +131,27 @@ impl IndividualTrace {
 
 
         [max, min]
+    }
+
+    pub fn average_before_bleaching(&self, pb_event: Option<usize>) -> Result<f64, IndividualTraceError> {
+
+        match pb_event {
+            Some(idx) => {
+                if idx >= self.values.len() - 2{
+                    return Err(IndividualTraceError::InvalidTimeStepINdex);
+                }
+
+                let [mean, _] = compute_mean_and_std(&self.values[idx + 1 .. self.values.len()]);
+
+                return Ok(mean);
+            }
+
+            None => {
+                let [mean, _] = compute_mean_and_std(&self.values);
+
+                return Ok(mean);
+            }
+        }
     }
 
     pub fn lifetimes(&self, threshold: f64, min_len: usize) ->  Vec<[usize; 2]>{
@@ -183,4 +236,34 @@ fn check_trace_validity(trace: &[f64]) -> Result<(), IndividualTraceError> {
     if trace.iter().any(|v| v.is_nan()) { return Err(IndividualTraceError::IncludesNaNs) }
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct PhotobleachingFilterValues {
+    pub median_filter_window_size: usize,
+    pub noise_threshold_multiple: f64,
+}
+
+impl PhotobleachingFilterValues {
+    pub fn default() -> Self {
+        Self{
+            median_filter_window_size: 9,
+            noise_threshold_multiple: 4.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FretLifetimesFilterValues {
+    pub threshold: f64,
+    pub min_len: usize,
+}
+
+impl FretLifetimesFilterValues {
+    pub fn default() -> Self {
+        Self {
+            threshold: 0.125,
+            min_len: 5,
+        }
+    }
 }

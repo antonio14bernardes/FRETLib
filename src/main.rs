@@ -25,8 +25,13 @@ use fret_lib::signal_analysis::hmm::initialization::hmm_initializer::*;
 use fret_lib::signal_analysis::hmm::amalgam_integration::{amalgam_fitness_functions::*, amalgam_modes::*};
 
 
+use fret_lib::trace_selection::individual_trace::*;
+use fret_lib::trace_selection::point_traces;
+use fret_lib::trace_selection::trace_loader::*;
+use fret_lib::trace_selection::individual_trace::*;
 
-fn main() {
+
+fn main_hmm() {
     // Define real system to get simulated time sequence
     let real_state1 = State::new(0, 10.0, 1.0).unwrap();
     let real_state2 = State::new(1, 20.0, 2.0).unwrap();
@@ -45,9 +50,14 @@ fn main() {
     ];
     let real_transition_matrix = TransitionMatrix::new(real_transition_matrix_raw);
 
-    let (_sequence_ids, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 1000);
-
-    
+    let mut sequence_set: Vec<Vec<f64>> = Vec::new();
+    let mut sequence_ids_set: Vec<Vec<usize>> = Vec::new();
+    let num_sequences = 10;
+    for _ in 0..num_sequences {
+        let (sequence_ids, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 1000);
+        sequence_set.push(sequence_values);
+        sequence_ids_set.push(sequence_ids);
+    }
 
     // Setup HMM
 
@@ -61,7 +71,7 @@ fn main() {
         }).unwrap();
     hmm.add_initializer().unwrap();
 
-    let input = HMMInput::Initializer { num_states: real_states.len(), sequence_set: vec![sequence_values] };
+    let input = HMMInput::Initializer { num_states: real_states.len(), sequence_set: sequence_set };
 
     hmm.run(input).unwrap();
 
@@ -78,10 +88,6 @@ fn main() {
     println!("State Occupancy: {:?}", state_occupancy);
 }
 
-use fret_lib::trace_selection::individual_trace::*;
-use fret_lib::trace_selection::point_traces;
-use fret_lib::trace_selection::trace_loader::*;
-use fret_lib::trace_selection::individual_trace::*;
 
 fn main() {
     let normal_path: &str = "/Users/antonio14bernardes/Documents/Internship/traces_data/Traces_T23_01_sif_pair5.txt";
@@ -93,8 +99,14 @@ fn main() {
     let mut point_traces = parse_file(file_path).unwrap();
 
     // let trace = point_traces.take_trace(&TraceType::AemDexc).unwrap();
+    println!("Trace types: {:?}", point_traces.get_types());
 
-    println!("Output: {:?}",point_traces.compute_pair_correlation());
+    let pb_filter = PhotobleachingFilterValues::default();
+    let fl_filter = FretLifetimesFilterValues::default();
+
+    let values_to_filter = point_traces.prepare_filter_values(&pb_filter, &fl_filter);
+
+    println!("Output: {:?}", values_to_filter);
 
     
 }

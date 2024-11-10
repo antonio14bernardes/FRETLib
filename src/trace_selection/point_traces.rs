@@ -1,5 +1,6 @@
+use super::filter::{MinMaxMeanStd, ValuesToFilter};
 use super::individual_trace::*;
-use super::filters::compute_mean_and_std;
+use super::tools::compute_mean_and_std;
 use std::collections::HashSet;
 
 
@@ -15,16 +16,18 @@ pub struct PointTraces {
 
 
     // Statistics and events 
-    acceptor_photobleaching: Option<usize>,
-    donor_photobleaching: Option<usize>,
-    donor_blinking_events: Option<Vec<usize>>, 
-    snr_signal: Option<f64>, // SNR before bleaching
-    snr_backgroung: Option<f64>, // SNR after bleaching
+    acceptor_photobleaching: Option<Vec<usize>>, // (Last event, number of events)
+    donor_photobleaching: Option<Vec<usize>>, // (Last event, number of events)
+    fret_lifetimes: Option<Vec<[usize; 2]>>,
+    // donor_blinking_events: Option<Vec<usize>>,
+    snr_signal: Option<f64>, // SNR of total intensity before donor bleaching
+    snr_backgroung: Option<f64>, // Mean of intensity before donor bleaching divided by s.d. of intensity after donor bleaching
     correlation_coef: Option<f64>, // Correlation between donor and acceptor
     background_std_post_bleach: Option<f64>,
-    mean_total_intensity: Option<f64>,
-
-
+    intensity_min_max_mean_std: Option<MinMaxMeanStd>,
+    first_fret: Option<f64>,
+    max_fret: Option<f64>,
+    average_fret: Option<f64>,
 }
 
 impl PointTraces {
@@ -39,12 +42,17 @@ impl PointTraces {
 
             donor_photobleaching: None,
             acceptor_photobleaching: None,
-            donor_blinking_events: None,
+            fret_lifetimes: None,
+            // donor_blinking_events: None,
             snr_signal: None,
             snr_backgroung: None,
             correlation_coef: None,
             background_std_post_bleach: None,
-            mean_total_intensity: None
+            intensity_min_max_mean_std: None,
+            first_fret: None,
+            max_fret: None,
+            average_fret: None,
+
         };
 
         let _ = new.update_donor_acceptor();
@@ -63,12 +71,17 @@ impl PointTraces {
 
             donor_photobleaching: None,
             acceptor_photobleaching: None,
-            donor_blinking_events: None,
+            fret_lifetimes: None,
+            // donor_blinking_events: None,
             snr_signal: None,
             snr_backgroung: None,
             correlation_coef: None,
             background_std_post_bleach: None,
-            mean_total_intensity: None,
+            intensity_min_max_mean_std: None,
+
+            first_fret: None,
+            max_fret: None,
+            average_fret: None,
         }
     }
 
@@ -79,8 +92,6 @@ impl PointTraces {
                 // Try to insert the trace into the HashSet
                 if self.traces.insert(trace) {
                     self.update_donor_acceptor();
-
-                    let _ = self.update_donor_acceptor();
 
                     Ok(())
                 } else {
@@ -200,7 +211,7 @@ impl PointTraces {
         }
 
         self.acceptor = None;
-        Err(PointTracesError::NoDonorFound)
+        Err(PointTracesError::NoAcceptorFound)
 
     }
 
@@ -227,24 +238,38 @@ impl PointTraces {
     }
 
 
-    pub fn detect_photobleaching(&mut self) -> Result<(), PointTracesError> {
+    pub fn detect_photobleaching(&mut self, photobleaching_filter_values: &PhotobleachingFilterValues) -> Result<(), PointTracesError> {
+        
+        // Retrieve parameters to detect photobleaching
+        let window_size = photobleaching_filter_values.median_filter_window_size;
+        let threshold = photobleaching_filter_values.noise_threshold_multiple;
+
         if self.donor.is_some() {
+            println!("Inside donor");
             let donor_type = self.donor.as_ref().unwrap().clone();
 
-            let mut donor = self.take_trace(&donor_type).unwrap();
+            let donor = self.get_trace(&donor_type).unwrap();
 
-            // donor.detect_photobleaching_event(threshold, window_size)
+            let all_events = donor.detect_photobleaching_events(threshold, window_size);
+
+            self.donor_photobleaching = Some(all_events);
         }
 
         if self.acceptor.is_some() {
+            println!("Inside acceptor");
             let acceptor_type = self.acceptor.as_ref().unwrap().clone();
 
-            let mut acceptor = self.take_trace(&acceptor_type).unwrap();
+            let acceptor = self.get_trace(&acceptor_type).unwrap();
 
-            // acceptor.detect_photobleaching_event(threshold, window_size)
+            let all_events = acceptor.detect_photobleaching_events(threshold, window_size);
+
+            let last_event = all_events.iter().max().unwrap_or(&0).clone();
+            let num_events = all_events.len();
+
+            self.acceptor_photobleaching = Some(all_events);
         }
 
-
+        println!("Donor inside: {:?}", self.donor);
 
         if self.donor.is_none() {
             return Err(PointTracesError::NoDonorFound);
@@ -258,7 +283,7 @@ impl PointTraces {
     }
 
 
-    pub fn compute_total_pair_intensity(&mut self) -> Result<[f64; 2], PointTracesError> {
+    pub fn compute_total_pair_intensity(&mut self) -> Result<(), PointTracesError> {
 
         let [donor, acceptor] = self.don_acc_pair.as_ref().ok_or(PointTracesError::NoDonorAcceptorPairFound)?;
 
@@ -270,17 +295,53 @@ impl PointTraces {
             sum_vec.push(a + d);
         }
 
-        let [mean, std] = compute_mean_and_std(&sum_vec);
-
         if let Ok(new_trace) = IndividualTrace::new(sum_vec, TraceType::TotalPairIntensity) {
-            self.insert_trace(new_trace);
-        }
+            self.insert_trace(new_trace)?;
+        } 
 
-        Ok([mean, std])  
+        Ok(())
+    }
+
+    pub fn compute_intensity_snr_and_noise(&mut self) -> Result<(), PointTracesError> {
+        // Retrieve donor photobleaching time step
+        let donor_pb_vec =
+        self.donor_photobleaching.as_ref().ok_or(PointTracesError::PhotobleachingDetectionNotPerformed)?;
+
+        let donor_pb = if donor_pb_vec.len() == 0 {0} else {donor_pb_vec[donor_pb_vec.len() - 1]};
+        let pb_input = if donor_pb > 0 {Some(donor_pb)} else {None};
+
+        // Get the intensity trace
+        let total_intensity = self.get_trace(&TraceType::TotalPairIntensity)
+        .ok_or(PointTracesError::TraceTypeNotPresent { trace_type: TraceType::TotalPairIntensity })?;
+
+        // Get the SNRs
+        
+        let out = total_intensity.snr_before_after_bleaching(pb_input)
+        .map_err(|error| PointTracesError::IndividualTraceError { error, trace_type: TraceType::TotalPairIntensity })?;
+
+        let snr_before = out[0].unwrap().clone();
+        let snr_after = out[1].unwrap_or(0.0); // If no photobleaching set to zero
+
+        // Get the noise
+        let out = total_intensity.noise_post_bleaching(pb_input)
+        .map_err(|error| PointTracesError::IndividualTraceError { error, trace_type: TraceType::TotalPairIntensity })?;
+
+        let noise = out.unwrap_or(0.0);
+
+
+        // Update struct fields
+        self.snr_signal = Some(snr_before);
+        self.snr_backgroung = Some(snr_after);
+        self.background_std_post_bleach = Some(noise);
+
+        
+
+        Ok(())
     }
     
-    pub fn compute_pair_correlation(&self) -> Result<f64, PointTracesError> {
-        let [donor, acceptor] = self.don_acc_pair.as_ref().ok_or(PointTracesError::NoDonorAcceptorPairFound)?;
+    pub fn compute_pair_correlation(&mut self) -> Result<(), PointTracesError> {
+        let [donor, acceptor] = self.don_acc_pair.as_ref()
+        .ok_or(PointTracesError::NoDonorAcceptorPairFound)?;
         
         let d_values = self.get_trace(donor).unwrap().get_values();
         let a_values = self.get_trace(acceptor).unwrap().get_values();
@@ -297,7 +358,107 @@ impl PointTraces {
             numerator += (d - d_mean) * (a - a_mean);
         }
 
-        Ok(numerator/denominator)
+        numerator /= (d_values.len() - 1) as f64;
+
+        self.correlation_coef = Some(numerator/denominator);
+
+        Ok(())
+    }
+
+    pub fn first_max_average_fret(&mut self) -> Result<(), PointTracesError> {
+        // Retrieve donor photobleaching time step
+        let donor_pb_vec =
+        self.donor_photobleaching.as_ref().ok_or(PointTracesError::PhotobleachingDetectionNotPerformed)?;
+
+        let donor_pb = if donor_pb_vec.len() == 0 {0} else {donor_pb_vec[donor_pb_vec.len() - 1]};
+        let pb_input = if donor_pb > 0 {Some(donor_pb)} else {None};
+
+
+
+        // Get the fret trace
+        let fret = self.get_trace(&TraceType::FRET)
+        .ok_or(PointTracesError::TraceTypeNotPresent { trace_type: TraceType::FRET })?;
+
+        // Get the interesting stuff
+        let [max, _min] = fret.max_min_values();
+        let first = fret.first_value();
+        let average = fret.average_before_bleaching(pb_input)
+        .map_err(|error| PointTracesError::IndividualTraceError { error, trace_type: TraceType::TotalPairIntensity })?;
+
+        self.max_fret = Some(max);
+        self.first_fret = Some(first);
+        self.average_fret = Some(average);
+
+        Ok(())
+    }
+
+    pub fn get_intensity_min_max_mean_std(&mut self) -> Result<(), PointTracesError> {
+        // Get the intensity trace
+        let total_intensity = self.get_trace(&TraceType::TotalPairIntensity)
+        .ok_or(PointTracesError::TraceTypeNotPresent { trace_type: TraceType::TotalPairIntensity })?;
+
+        let [max, min] = total_intensity.max_min_values();
+        let [mean, std] = compute_mean_and_std(total_intensity.get_values());
+
+        let out_struct = MinMaxMeanStd{min, max, mean, std};
+        self.intensity_min_max_mean_std = Some(out_struct);
+
+        Ok(())
+    }
+
+    pub fn get_fret_lifetimes(&mut self, fret_lifetimes_filter_values: &FretLifetimesFilterValues) -> Result<(), PointTracesError>  {
+        // Get the fret trace
+        let fret = self.get_trace(&TraceType::FRET)
+        .ok_or(PointTracesError::TraceTypeNotPresent { trace_type: TraceType::FRET })?;
+
+        // Get the lifetimes
+        let threshold = fret_lifetimes_filter_values.threshold;
+        let min_len = fret_lifetimes_filter_values.min_len;
+
+        let lifetimes = fret.lifetimes(threshold, min_len);
+
+        self.fret_lifetimes = Some(lifetimes);
+
+        Ok(())
+    }
+
+
+    pub fn prepare_filter_values(
+        &mut self,
+        photobleaching_filter_values: &PhotobleachingFilterValues,
+        fret_lifetimes_filter_values: &FretLifetimesFilterValues,
+    ) -> Result<ValuesToFilter, PointTracesError>{
+        self.update_donor_acceptor();
+
+        if let Err(e) = self.detect_photobleaching(photobleaching_filter_values) {
+            if let PointTracesError::NoAcceptorFound = e {} // Ignore this error 
+            else {
+                return Err(e); // Only propagate if it's not NoAcceptorFound
+            }
+        }
+        self.compute_total_pair_intensity()?;
+        self.compute_intensity_snr_and_noise()?;
+        self.compute_pair_correlation()?;
+        self.get_intensity_min_max_mean_std()?;
+        self.get_fret_lifetimes(fret_lifetimes_filter_values)?;
+        self.first_max_average_fret()?;
+
+
+        let values_to_filter = ValuesToFilter{
+            donor_photobleaching: self.donor_photobleaching.as_ref().unwrap().clone(),
+            fret_lifetimes: self.fret_lifetimes.as_ref().unwrap().clone(),
+            // donor_blinking_events: Vec<usize>,
+            snr_signal: self.snr_signal.unwrap(), 
+            snr_backgroung: self.snr_backgroung.unwrap(),
+            correlation_coef: self.correlation_coef.unwrap(),
+            background_std_post_bleach: self.background_std_post_bleach.unwrap(),
+            intensity_min_man_mean_std: self.intensity_min_max_mean_std.as_ref().unwrap().clone(),
+            first_fret: self.first_fret.unwrap(),
+            max_fret: self.max_fret.unwrap(),
+            average_fret: self.average_fret.unwrap(),
+        };
+
+        Ok(values_to_filter)
     }
 }
 
@@ -326,5 +487,8 @@ pub enum PointTracesError {
     NoDonorAcceptorPairFound,
     NoDonorFound,
     NoAcceptorFound,
-    StdZero
+    StdZero,
+
+    PhotobleachingDetectionNotPerformed,
+    PhotobleachingNotFound,
 }
