@@ -12,6 +12,12 @@ pub enum ClusterEvaluationMethod {
     SimplifiedSilhouette,
 }
 
+impl ClusterEvaluationMethod {
+    pub fn default() -> Self {
+        Self::Silhouette
+    }
+}
+
 // Helper struct to represent an unordered pair
 #[derive(Eq, PartialEq, Debug, Clone)]
 struct UnorderedPair((usize, usize), (usize, usize));

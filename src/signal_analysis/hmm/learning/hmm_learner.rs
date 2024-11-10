@@ -48,7 +48,7 @@ impl HMMLearnerTrait for HMMLearner {
     fn initialize_learner(
         &mut self,
         num_states: usize, 
-        sequence_values: &[f64],
+        sequence_set: &Vec<Vec<f64>>,
         specific_initial_values: LearnerSpecificInitialValues
     ) -> Result<(), HMMLearnerError> {
 
@@ -69,7 +69,7 @@ impl HMMLearnerTrait for HMMLearner {
             _ => return Err(HMMLearnerError::IncompatibleInputs), // Terrible cursed combo
         };
 
-        self.learner.initialize_learner(num_states, sequence_values, specific_initial_values)?;
+        self.learner.initialize_learner(num_states, sequence_set, specific_initial_values)?;
         Ok(())
     }
 
@@ -109,7 +109,7 @@ mod tests {
     use initialization::kmeans::k_means_1_d;
     use nalgebra::{DMatrix, DVector};
 
-    fn create_test_sequence() -> (Vec<State>, StartMatrix, TransitionMatrix, Vec<f64>) {
+    fn create_test_sequence_set() -> (Vec<State>, StartMatrix, TransitionMatrix, Vec<Vec<f64>>) {
         // Define real states
         let real_state1 = State::new(0, 10.0, 1.0).unwrap();
         let real_state2 = State::new(1, 20.0, 2.0).unwrap();
@@ -126,34 +126,48 @@ mod tests {
             vec![0.2, 0.05, 0.75],
         ]);
 
-        // Generate the sequence
-        let (_sequence_ids, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 1000);
+        // Generate multiple sequences as the sequence set
+        let sequence_set = (0..5)
+            .map(|_| {
+                let (_, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 200);
+                sequence_values
+            })
+            .collect();
 
-        (real_states, real_start_matrix, real_transition_matrix, sequence_values)
+        (real_states, real_start_matrix, real_transition_matrix, sequence_set)
     }
+
+    
 
     #[test]
     fn test_amalgam_learner_direct_fit_fn() {
-        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence();
+        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_set) = create_test_sequence_set();
         let num_states = real_states.len();
 
-        // Preprocess sequence to set constraints
-        let max_value = sequence_values.iter().cloned().fold(f64::NAN, f64::max);
-        let min_value = sequence_values.iter().cloned().fold(f64::NAN, f64::min);
+        // Preprocess sequence set to set constraints
+        let max_value = sequence_set.iter()
+            .flat_map(|sequence| sequence.iter())
+            .cloned()
+            .fold(f64::NAN, f64::max);
+        let min_value = sequence_set.iter()
+            .flat_map(|sequence| sequence.iter())
+            .cloned()
+            .fold(f64::NAN, f64::min);
+        
         let range = max_value - min_value;
         let max_noise = range / (num_states as f64 * 2.0);
         let min_noise = max_noise / 1e2;
 
-        // Cluster sequence values to get initial distributions
-        let num_clusters = num_states;
-        let (cluster_means, cluster_assignments) = k_means_1_d(&sequence_values, num_clusters, 100, 1e-3);
+        // Flattened values for clustering
+        let flattened_values: Vec<f64> = sequence_set.iter().flat_map(|seq| seq.clone()).collect();
+        let (cluster_means, cluster_assignments) = k_means_1_d(&flattened_values, num_states, 100, 1e-3);
 
-        let mut cluster_stds = vec![0.0; num_clusters];
+        let mut cluster_stds = vec![0.0; num_states];
         let mut count_per_cluster = vec![0; num_states];
         for &assignment in &cluster_assignments {
             count_per_cluster[assignment] += 1;
         }
-        for (value, &assignment) in sequence_values.iter().zip(&cluster_assignments) {
+        for (value, &assignment) in flattened_values.iter().zip(&cluster_assignments) {
             cluster_stds[assignment] += (value - cluster_means[assignment]).powi(2);
         }
         for i in 0..cluster_stds.len() {
@@ -166,7 +180,7 @@ mod tests {
             .map(|&std| (std - mean_of_cluster_stds).powi(2))
             .sum::<f64>()
             .sqrt()
-            / num_clusters as f64;
+            / num_states as f64;
 
         // Define initial values and distributions
         let initial_value_means = cluster_means.clone();
@@ -224,7 +238,6 @@ mod tests {
         ]
         .concat();
 
-
         // Define learner with Amalgam setup
         let mut learner = HMMLearner::new(LearnerType::AmalgamIdea);
 
@@ -240,22 +253,23 @@ mod tests {
             )
             .expect("Failed to setup Amalgam learner");
         
-        // Initialize learner
+        // Initialize learner with the sequence set
         learner
             .initialize_learner(
                 num_states,
-                &sequence_values,
+                &sequence_set,  // Pass sequence_set here
                 LearnerSpecificInitialValues::AmalgamIdea {
                     initial_distributions: Some((initial_means, initial_covs)),
                 },
             )
             .expect("Failed to initialize Amalgam learner");
+        
         // Run learning process and check output
         let (mut states, start_matrix, transition_matrix) = learner
             .learn()
             .expect("Failed to learn using Amalgam");
 
-        // Sort real and learned states by value
+        // Sort real and learned states by value for comparison
         let mut real_states_sorted = real_states.clone();
         real_states_sorted.sort_by(|a, b| a.get_value().partial_cmp(&b.get_value()).unwrap());
         states.sort_by(|a, b| a.get_value().partial_cmp(&b.get_value()).unwrap());
@@ -285,32 +299,36 @@ mod tests {
 
         println!("Start Matrix: {:?}", start_matrix);
         println!("Transition Matrix: {:?}", transition_matrix);
-
-        
     }
 
     #[test]
     fn test_amalgam_learner_baum_welch_fit_fn() {
-        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence();
+        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_set) = create_test_sequence_set();
         let num_states = real_states.len();
 
-        // Preprocess sequence to set constraints
-        let max_value = sequence_values.iter().cloned().fold(f64::NAN, f64::max);
-        let min_value = sequence_values.iter().cloned().fold(f64::NAN, f64::min);
+        // Preprocess sequence set to set constraints
+        let max_value = sequence_set.iter()
+            .flat_map(|sequence| sequence.iter())
+            .cloned()
+            .fold(f64::NAN, f64::max);
+        let min_value = sequence_set.iter()
+            .flat_map(|sequence| sequence.iter())
+            .cloned()
+            .fold(f64::NAN, f64::min);
         let range = max_value - min_value;
         let max_noise = range / (num_states as f64 * 2.0);
         let min_noise = max_noise / 1e2;
 
-        // Cluster sequence values to get initial distributions
-        let num_clusters = num_states;
-        let (cluster_means, cluster_assignments) = k_means_1_d(&sequence_values, num_clusters, 100, 1e-3);
+        // Flattened values for clustering
+        let flattened_values: Vec<f64> = sequence_set.iter().flat_map(|seq| seq.clone()).collect();
+        let (cluster_means, cluster_assignments) = k_means_1_d(&flattened_values, num_states, 100, 1e-3);
 
-        let mut cluster_stds = vec![0.0; num_clusters];
+        let mut cluster_stds = vec![0.0; num_states];
         let mut count_per_cluster = vec![0; num_states];
         for &assignment in &cluster_assignments {
             count_per_cluster[assignment] += 1;
         }
-        for (value, &assignment) in sequence_values.iter().zip(&cluster_assignments) {
+        for (value, &assignment) in flattened_values.iter().zip(&cluster_assignments) {
             cluster_stds[assignment] += (value - cluster_means[assignment]).powi(2);
         }
         for i in 0..cluster_stds.len() {
@@ -323,7 +341,7 @@ mod tests {
             .map(|&std| (std - mean_of_cluster_stds).powi(2))
             .sum::<f64>()
             .sqrt()
-            / num_clusters as f64;
+            / num_states as f64;
 
         // Define initial values and distributions
         let initial_value_means = cluster_means.clone();
@@ -365,7 +383,6 @@ mod tests {
         ]
         .concat();
 
-
         // Define learner with Amalgam setup
         let mut learner = HMMLearner::new(LearnerType::AmalgamIdea);
 
@@ -377,27 +394,27 @@ mod tests {
                     dependence_type: Some(AmalgamDependencies::AllIndependent),
                     fitness_type: Some(AmalgamFitness::BaumWelch),
                     max_iterations: Some(500),
-                }
+                },
             )
             .expect("Failed to setup Amalgam learner");
 
-        // Initialize learner with initial values
+        // Initialize learner with sequence set
         learner
             .initialize_learner(
                 num_states,
-                &sequence_values,
+                &sequence_set,  // Pass the sequence set here
                 LearnerSpecificInitialValues::AmalgamIdea {
                     initial_distributions: Some((initial_means, initial_covs)),
                 },
             )
-            .expect("Failed to setup Amalgam learner");
+            .expect("Failed to initialize Amalgam learner");
 
         // Run learning process and check output
         let (mut states, start_matrix, transition_matrix) = learner
             .learn()
             .expect("Failed to learn using Amalgam");
 
-        // Sort real and learned states by value
+        // Sort real and learned states by value for comparison
         let mut real_states_sorted = real_states.clone();
         real_states_sorted.sort_by(|a, b| a.get_value().partial_cmp(&b.get_value()).unwrap());
         states.sort_by(|a, b| a.get_value().partial_cmp(&b.get_value()).unwrap());
@@ -427,33 +444,35 @@ mod tests {
 
         println!("Start Matrix: {:?}", start_matrix);
         println!("Transition Matrix: {:?}", transition_matrix);
-
-        
     }
 
 
     #[test]
     fn test_baum_welch_learner() {
-        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence();
+        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_set) = create_test_sequence_set();
         let num_states = real_states.len();
+
+        // Flatten sequence set for clustering
+        let flattened_values: Vec<f64> = sequence_set.iter().flat_map(|seq| seq.clone()).collect();
 
         // Cluster sequence values to get initial distributions
         let num_clusters = num_states;
-        let (cluster_means, _cluster_assignments) = k_means_1_d(&sequence_values, num_clusters, 100, 1e-3);
+        let (cluster_means, _cluster_assignments) = k_means_1_d(&flattened_values, num_clusters, 100, 1e-3);
 
-        // Noise
-        let min_value= sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-        let max_value= sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+        // Noise calculation
+        let min_value = flattened_values.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max_value = flattened_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let range = max_value - min_value;
-        let noise = range / num_states as f64 * 0.5;
+        let noise = range / (num_states as f64 * 0.5);
 
-        // Define initial values for BaumWelch
-        let initial_states = HMMInstance::generate_state_set(&cluster_means, &vec![noise; num_states]).unwrap();
+        // Define initial values for Baum-Welch
+        let initial_states = HMMInstance::generate_state_set(&cluster_means, &vec![noise; num_states])
+            .expect("Failed to generate initial state set for Baum-Welch");
 
-        // Define learner with BaumWelch setup
+        // Define learner with Baum-Welch setup
         let mut learner = HMMLearner::new(LearnerType::BaumWelch);
 
-        // Setup learner with specific BaumWelch setup 
+        // Setup learner with specific Baum-Welch setup
         learner
             .setup_learner(
                 LearnerSpecificSetup::BaumWelch {
@@ -462,11 +481,11 @@ mod tests {
             )
             .expect("Failed to setup Baum-Welch learner");
 
-        // Initialize learner with specific BaumWelch initial values
+        // Initialize learner with the sequence set
         learner
             .initialize_learner(
                 num_states,
-                &sequence_values,
+                &sequence_set,
                 LearnerSpecificInitialValues::BaumWelch {
                     states: initial_states,
                     start_matrix: None,
@@ -500,7 +519,7 @@ mod tests {
             );
 
             assert!(
-                error_relative<= threshold_relative,
+                error_relative <= threshold_relative,
                 "Learned state value {:.3} is outside the allowed {:.2}% error threshold for real value {:.3}",
                 learned_value,
                 threshold_relative,

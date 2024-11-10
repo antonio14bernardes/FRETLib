@@ -5,8 +5,6 @@ use super::occams_razor::*;
 
 pub const MAX_K_DEFAULT: usize = 10;
 pub const MIN_K_DEFAULT: usize = 1;
-pub const NUM_STATES_FINDER_DEFAULT_STRAT: NumStatesFindStrat = NumStatesFindStrat::KMeansClustering{num_tries: None, max_iters: None, tolerance: None, method: None};
-
 
 #[derive(Debug, Clone)]
 pub struct HMMNumStatesFinder {
@@ -18,7 +16,7 @@ pub struct HMMNumStatesFinder {
 impl HMMNumStatesFinder {
     pub fn new() -> Self{
         
-        HMMNumStatesFinder{strategy: NUM_STATES_FINDER_DEFAULT_STRAT, max_k: MAX_K_DEFAULT, min_k: MIN_K_DEFAULT}
+        HMMNumStatesFinder{strategy: NumStatesFindStrat::default(), max_k: MAX_K_DEFAULT, min_k: MIN_K_DEFAULT}
     }
 
     pub fn set_strategy(&mut self, strategy: NumStatesFindStrat) -> Result<(), HMMNumStatesFinderError> {
@@ -49,7 +47,7 @@ impl HMMNumStatesFinder {
         Ok(())
     }
 
-    pub fn get_number_of_states(&self, sequence: &[f64]) -> Result<usize, HMMNumStatesFinderError> {
+    pub fn get_number_of_states(&self, sequence_set: &Vec<Vec<f64>>) -> Result<usize, HMMNumStatesFinderError> {
         let num_states_optimal: usize;
 
         match &self.strategy {
@@ -59,15 +57,15 @@ impl HMMNumStatesFinder {
                 let tolerance = tolerance.unwrap_or(KMEANS_TOLERANCE_DEFAULT);
                 let method = method.as_ref().unwrap_or(&KMEANS_EVAL_METHOD_DEFAULT).clone();
 
-                num_states_optimal = NumStatesFindStrat::kmeans_clustering_strat(sequence, self.max_k, self.min_k, num_tries, max_iters, tolerance, &method)?;
+                num_states_optimal = NumStatesFindStrat::kmeans_clustering_strat(sequence_set, self.max_k, self.min_k, num_tries, max_iters, tolerance, &method)?;
             }
 
             NumStatesFindStrat::BaumWelch => {
-                num_states_optimal = NumStatesFindStrat::baum_welch_strat(sequence, self.max_k, self.min_k)?;
+                num_states_optimal = NumStatesFindStrat::baum_welch_strat(sequence_set, self.max_k, self.min_k)?;
             }
 
             NumStatesFindStrat::CurrentSetup { initializer, learner } => {
-                num_states_optimal = NumStatesFindStrat::full_setup_strat(sequence, self.max_k, self.min_k, &initializer, &learner)?;
+                num_states_optimal = NumStatesFindStrat::full_setup_strat(sequence_set, self.max_k, self.min_k, &initializer, &learner)?;
             }
 
         }
@@ -84,8 +82,16 @@ pub enum NumStatesFindStrat {
 }
 
 impl NumStatesFindStrat {
+    pub fn default() -> Self {
+        NumStatesFindStrat::KMeansClustering{
+            num_tries: Some(KMEANS_NUM_TRIES_DEFAULT),
+            max_iters: Some(KMEANS_MAX_ITERS_DEFAULT),
+            tolerance: Some(KMEANS_TOLERANCE_DEFAULT),
+            method: Some(ClusterEvaluationMethod::default())
+        }
+    }
     fn kmeans_clustering_strat(
-        sequence_values: &[f64],
+        sequence_set: &Vec<Vec<f64>>,
         max_k: usize,
         min_k: usize,
         num_tries: usize,
@@ -93,6 +99,9 @@ impl NumStatesFindStrat {
         tolerance: f64,
         method: &ClusterEvaluationMethod
     ) -> Result<usize, HMMNumStatesFinderError> {
+
+        // Flatten the sequence set
+        let total_sequence_values = sequence_set.concat();
 
         let mut best_k: usize = 0;
         let mut best_score = f64::NEG_INFINITY;
@@ -105,14 +114,14 @@ impl NumStatesFindStrat {
                 ClusterEvaluationMethod::Silhouette => {
                     let simplified = false;
                     (curr_k, curr_score) =
-                    silhouette_analysis(sequence_values, min_k, max_k, max_iters, tolerance, simplified)
+                    silhouette_analysis(&total_sequence_values, min_k, max_k, max_iters, tolerance, simplified)
                     .map_err(|err| HMMNumStatesFinderError::ClusterEvalError { err })?;
     
                 }
                 ClusterEvaluationMethod::SimplifiedSilhouette => {
                     let simplified = true;
                     (curr_k, curr_score) = 
-                    silhouette_analysis(sequence_values, min_k, max_k, max_iters, tolerance, simplified)
+                    silhouette_analysis(&total_sequence_values, min_k, max_k, max_iters, tolerance, simplified)
                     .map_err(|err| HMMNumStatesFinderError::ClusterEvalError { err })?;
                 }
             }
@@ -128,20 +137,22 @@ impl NumStatesFindStrat {
         Ok(best_k)
     }
 
-    fn baum_welch_strat(sequence: &[f64], max_k: usize, min_k: usize) -> Result<usize, HMMNumStatesFinderError> {
+    fn baum_welch_strat(sequence: &Vec<Vec<f64>>, max_k: usize, min_k: usize) -> Result<usize, HMMNumStatesFinderError> {
         let trial_enclosure = |num_states: usize| {
             let owned_sequence = sequence.to_vec();
             trial_fn_baum_welch(&owned_sequence, num_states)
         };
+        println!("Got to before the bic");
         let (num_states, _) = bayes_information_criterion_binary_search(
             trial_enclosure, min_k, max_k
         )
         .map_err(|err| HMMNumStatesFinderError::BayesInformationCriterionError { err })?;
+        println!("Got to after the bic");
 
         Ok(num_states)
     }
 
-    fn full_setup_strat(sequence: &[f64], max_k: usize, min_k: usize, initializer: &HMMInitializer, learner: &HMMLearner) -> Result<usize, HMMNumStatesFinderError> {
+    fn full_setup_strat(sequence: &Vec<Vec<f64>>, max_k: usize, min_k: usize, initializer: &HMMInitializer, learner: &HMMLearner) -> Result<usize, HMMNumStatesFinderError> {
         let trial_enclosure = |num_states: usize| {
             let owned_sequence = sequence.to_vec();
             let initializer_owned = initializer.clone();
@@ -170,63 +181,66 @@ pub enum HMMNumStatesFinderError {
     HMMLearnerError {err: HMMLearnerError},
 }
 
-fn trial_fn_baum_welch(sequence: &[f64], num_states: usize) -> (f64, usize, usize){
+fn trial_fn_baum_welch(sequence_set: &Vec<Vec<f64>>, num_states: usize) -> (f64, usize, usize){
 
     // Compute the number of parameters
     let num_parameters = 3 * num_states + num_states * num_states;
     
-    // Get num_samples
-    let num_samples = sequence.len();
+    // Get num_samples as the average
+    let num_samples = sequence_set.iter().map(|sequence| sequence.len()).sum::<usize>() / sequence_set.len();
 
     // Get the baum welch setup stuff
-    let baum_welch_setup = LearnerSpecificSetup::BaumWelch { termination_criterion: None };
+    let baum_welch_setup = LearnerSpecificSetup::default(&LearnerType::BaumWelch);
 
     // Get the initializer
     let initializer = HMMInitializer::new(&baum_welch_setup);
 
     // Get the initial values for baum welch
-    let init_values_res = initializer.get_intial_values(sequence, num_states);
+    let init_values_res = initializer.get_intial_values(sequence_set, num_states);
     if init_values_res.is_err() {return (f64::NEG_INFINITY, num_parameters, num_samples)}
     let baum_init_values = init_values_res.unwrap();
 
     // Get, setup, and initialize the baum welch learner
     let mut baum_learner = HMMLearner::new(LearnerType::BaumWelch);
     baum_learner.setup_learner(baum_welch_setup).unwrap();
-    baum_learner.initialize_learner(num_states, sequence, baum_init_values).unwrap();
+    baum_learner.initialize_learner(num_states, sequence_set, baum_init_values).unwrap();
 
     // Run baum_welch learner
     let baum_output = baum_learner.learn();
 
     // Retrieve log_likelihood from the baum welch object
     let log_likelihood = if baum_output.is_ok() {
+        println!("Was good");
         baum_learner.get_log_likelihood().unwrap_or(f64::NEG_INFINITY)
     } else {
+        println!("Error is {:?}", baum_output);
         f64::NEG_INFINITY
     };
 
+    println!("Got fitness");
     
     (log_likelihood, num_parameters, num_samples)
 
 }
 
 
-fn trial_fn_full_setup(sequence: &[f64], num_states: usize, initializer: HMMInitializer, mut learner: HMMLearner)
+fn trial_fn_full_setup(sequence_set: &Vec<Vec<f64>>, num_states: usize, initializer: HMMInitializer, mut learner: HMMLearner)
  -> (f64, usize, usize)
  {
 
     // Compute the number of parameters
     let num_parameters = 3 * num_states + num_states * num_states;
     
-    // Get num_samples
-    let num_samples = sequence.len();
+    // Get num_samples as the average
+    let num_samples = sequence_set.iter().map(|sequence| sequence.len()).sum::<usize>() / sequence_set.len();
 
     // Get the initial values for baum welch
-    let init_values_res = initializer.get_intial_values(sequence, num_states);
+    let init_values_res = initializer.get_intial_values(sequence_set, num_states);
     if init_values_res.is_err() {return (f64::NEG_INFINITY, num_parameters, num_samples)}
     let learner_init_values = init_values_res.unwrap();
 
     // Get, setup, and initialize the baum welch learner
-    learner.initialize_learner(num_states, sequence, learner_init_values).unwrap();
+    learner.initialize_learner(num_states, sequence_set, learner_init_values).unwrap();
 
     // Run baum_welch learner
     let learner_output = learner.learn();
@@ -250,27 +264,37 @@ mod tests {
     use super::*;
     use crate::signal_analysis::hmm::{amalgam_integration::amalgam_modes::{AmalgamDependencies, AmalgamFitness}, hmm_instance::HMMInstance, StartMatrix, State, TransitionMatrix};
 
-    fn create_test_sequence() -> (Vec<State>, StartMatrix, TransitionMatrix, Vec<f64>) {
+    fn create_test_sequence_set() -> (Vec<State>, StartMatrix, TransitionMatrix, Vec<Vec<f64>>) {
+        // Define real states
         let real_state1 = State::new(0, 10.0, 1.0).unwrap();
         let real_state2 = State::new(1, 20.0, 2.0).unwrap();
         let real_state3 = State::new(2, 30.0, 3.0).unwrap();
         let real_states = vec![real_state1, real_state2, real_state3];
 
+        // Define start matrix
         let real_start_matrix = StartMatrix::new(vec![0.1, 0.8, 0.1]);
+
+        // Define transition matrix
         let real_transition_matrix = TransitionMatrix::new(vec![
             vec![0.8, 0.1, 0.1],
             vec![0.1, 0.7, 0.2],
             vec![0.2, 0.05, 0.75],
         ]);
 
-        let (_sequence_ids, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 1000);
+        // Generate multiple sequences as the sequence set
+        let sequence_set = (0..5)
+            .map(|_| {
+                let (_, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 200);
+                sequence_values
+            })
+            .collect();
 
-        (real_states, real_start_matrix, real_transition_matrix, sequence_values)
+        (real_states, real_start_matrix, real_transition_matrix, sequence_set)
     }
 
     #[test]
     fn test_kmeans_clustering_strategy() {
-        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence();
+        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence_set();
 
         let strategy = NumStatesFindStrat::KMeansClustering {
             num_tries: None,
@@ -292,7 +316,7 @@ mod tests {
 
     #[test]
     fn test_baum_welch_strategy() {
-        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence();
+        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence_set();
 
         let strategy = NumStatesFindStrat::BaumWelch;
 
@@ -300,8 +324,10 @@ mod tests {
 
         num_states_finder.set_strategy(strategy).expect("Failed to set strategy");
 
-        let num_states_optimal = num_states_finder.get_number_of_states(&sequence_values)
-            .expect("Failed to get number of states using BaumWelch strategy");
+        let num_states_optimal_res = num_states_finder.get_number_of_states(&sequence_values);
+        
+            
+        let num_states_optimal = num_states_optimal_res.expect("Failed to get number of states using BaumWelch strategy");
 
         println!("Optimal number of states found by Baum-Welch: {}", num_states_optimal);
         assert_eq!(num_states_optimal, real_states.len(), "Did not find the correct number of states");
@@ -309,7 +335,7 @@ mod tests {
 
     #[test]
     fn test_current_setup_strategy_with_amalgam() {
-        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence();
+        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence_set();
 
         // Set up Amalgam-specific parameters
         let setup = LearnerSpecificSetup::AmalgamIdea {
