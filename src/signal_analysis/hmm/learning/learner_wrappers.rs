@@ -1,21 +1,12 @@
-use rand::thread_rng;
-
 use crate::optimization::amalgam_idea::AmalgamIdea;
 use crate::signal_analysis::hmm::amalgam_integration::amalgam_fitness_functions::{AmalgamHMMFitness, AmalgamHMMFitnessFunction};
-use crate::signal_analysis::hmm::amalgam_integration::amalgam_modes::{get_amalgam_object, AMALGAM_DEPENDENCY_DEFAULT, AMALGAM_FITNESS_DEFAULT, AMALGAM_MAX_ITERS_DEFAULT, ITER_MEMORY_DEFAULT};
-use crate::signal_analysis::hmm::baum_welch::{BaumWelch, BAUM_WELCH_TERMINATION_DEFAULT};
+use crate::signal_analysis::hmm::amalgam_integration::amalgam_modes::get_amalgam_object;
+use crate::signal_analysis::hmm::baum_welch::{run_baum_welch_on_sequence_set, BaumWelch, BAUM_WELCH_TERMINATION_DEFAULT};
 use crate::signal_analysis::hmm::optimization_tracker::{StateCollapseHandle, TerminationCriterium};
-use crate::signal_analysis::hmm::amalgam_integration::amalgam_fitness_functions::set_initial_states_with_jitter_baum;
 use crate::signal_analysis::hmm::{StartMatrix, State, TransitionMatrix};
 use crate::optimization::optimizer::{OptimizationFitness, Optimizer};
 
-use super::learner_trait::{HMMLearnerTrait, HMMLearnerError, LearnerSpecificSetup, LearnerSpecificInitialValues};
-
-pub const AMALGAM_SETUP_DEFAULT: LearnerSpecificSetup =
-LearnerSpecificSetup::AmalgamIdea 
-{ iter_memory: Some(ITER_MEMORY_DEFAULT),
-    dependence_type: Some(AMALGAM_DEPENDENCY_DEFAULT),
-    fitness_type: Some(AMALGAM_FITNESS_DEFAULT), max_iterations: Some(AMALGAM_MAX_ITERS_DEFAULT) };
+use super::learner_trait::{HMMLearnerError, HMMLearnerTrait, LearnerSpecificInitialValues, LearnerSpecificSetup, LearnerType};
 
 #[derive(Debug, Clone)]
 pub struct AmalgamHMMWrapper {
@@ -26,7 +17,7 @@ pub struct AmalgamHMMWrapper {
 impl AmalgamHMMWrapper {
     pub fn new() -> Self { 
         let mut out = Self{amalgam: None, setup_data: None};
-        out.setup_learner(AMALGAM_SETUP_DEFAULT).unwrap();
+        out.setup_learner(LearnerSpecificSetup::default(&LearnerType::AmalgamIdea)).unwrap();
 
         out
     }
@@ -41,14 +32,14 @@ impl HMMLearnerTrait for AmalgamHMMWrapper {
             _ => {return Err(HMMLearnerError::InvalidSetupType)}
         }
         
-        self.setup_data = Some(specific_setup);
+        self.setup_data = Some(specific_setup.handle_nones()); // Removes any nones from the setup
         
         Ok(())
     }
     fn initialize_learner(
             &mut self,
             num_states: usize,
-            sequence_values: &[f64],
+            sequence_values: &Vec<Vec<f64>>,
             specific_initial_values: LearnerSpecificInitialValues) -> Result<(), HMMLearnerError> {
 
         
@@ -65,17 +56,19 @@ impl HMMLearnerTrait for AmalgamHMMWrapper {
 
         match self.setup_data.as_ref().unwrap() {
             LearnerSpecificSetup::AmalgamIdea { iter_memory, dependence_type, fitness_type, max_iterations } => {
-                let iter_memory = iter_memory.unwrap_or(ITER_MEMORY_DEFAULT);
-                let dependence_type = dependence_type.as_ref().unwrap_or(&AMALGAM_DEPENDENCY_DEFAULT).clone();
-                let fitness_type = fitness_type.as_ref().unwrap_or(&AMALGAM_FITNESS_DEFAULT).clone();
+                let iter_memory = iter_memory.unwrap();
+                let dependence_type = dependence_type.as_ref().unwrap().clone();
+                let fitness_type = fitness_type.as_ref().unwrap().clone();
+                let max_iters = max_iterations.unwrap();
 
                 // Get the object
                 amalgam = get_amalgam_object(iter_memory, num_states, sequence_values, &dependence_type, &fitness_type)?;
                 
-                // If specified, set max number of iterations
-                if let Some(max_iters) = max_iterations {
-                    amalgam.set_max_iterations(*max_iters);
+                // If max_iters is not usize::max, set the max_iters
+                if max_iters != usize::MAX {
+                    amalgam.set_max_iterations(max_iters);
                 }
+                
                 
             }
 
@@ -157,9 +150,13 @@ LearnerSpecificSetup::BaumWelch { termination_criterion: None };
 
 #[derive(Debug, Clone)]
 pub struct BaumWelchWrapper {
-    baum_welch: Option<BaumWelch>,
-    sequence_values: Option<Vec<f64>>,
+    sequence_set: Option<Vec<Vec<f64>>>,
+    initial_states: Option<Vec<State>>,
+    initial_start_matrix: Option<StartMatrix>,
+    initial_transition_matrix: Option<TransitionMatrix>,
     termination_criterion: Option<TerminationCriterium>,
+
+    log_likelihood: Option<f64>,
 
     setup_data: Option<LearnerSpecificSetup>,
 
@@ -168,9 +165,12 @@ pub struct BaumWelchWrapper {
 impl BaumWelchWrapper {
     pub fn new() -> Self { 
         let mut out = Self {
-            baum_welch: None,
-            sequence_values: None, 
+            sequence_set: None, 
+            initial_states: None,
+            initial_start_matrix: None,
+            initial_transition_matrix: None,
             termination_criterion: None,
+            log_likelihood: None,
             setup_data: None,
         };
 
@@ -198,7 +198,7 @@ impl HMMLearnerTrait for BaumWelchWrapper {
     fn initialize_learner(
             &mut self,
             num_states: usize,
-            sequence_values: &[f64],
+            sequence_set: &Vec<Vec<f64>>,
             specific_initial_values: LearnerSpecificInitialValues) -> Result<(), HMMLearnerError> {
 
         if self.setup_data.is_none() {
@@ -208,10 +208,6 @@ impl HMMLearnerTrait for BaumWelchWrapper {
         if num_states == 0 {
             return Err(HMMLearnerError::InvalidNumberOfStates);
         }
-
-        
-        // Get the baum welch object
-        let mut baum = BaumWelch::new(num_states as u16);
 
         // Set the default maximum iterations
         let termination: TerminationCriterium;
@@ -226,25 +222,15 @@ impl HMMLearnerTrait for BaumWelchWrapper {
 
         match specific_initial_values {
             LearnerSpecificInitialValues::BaumWelch { states, start_matrix, transition_matrix } => {
-                let mut rng = thread_rng();
-                set_initial_states_with_jitter_baum(&mut baum, &states, &mut rng, 100)
-                .map_err(|err| HMMLearnerError::BaumWelchError { err })?;
-
-                let start_matrix = start_matrix.unwrap_or(StartMatrix::new_balanced(states.len()));
-                let transition_matrix = transition_matrix.unwrap_or(TransitionMatrix::new_balanced(states.len()));
-
-                baum.set_initial_start_matrix(start_matrix).unwrap();
-                baum.set_initial_transition_matrix(transition_matrix).unwrap();
+                self.initial_states = Some(states);
+                self.initial_start_matrix = Some(start_matrix.unwrap_or(StartMatrix::new_balanced(num_states)));
+                self.initial_transition_matrix = Some(transition_matrix.unwrap_or(TransitionMatrix::new_balanced(num_states)));
             }
 
             _ => {return Err(HMMLearnerError::InvalidStartValuesType)}
         }
         
-        // Set state collapse to Abort. Any other wouldnt make sense. 
-        baum.set_state_collapse_handle(StateCollapseHandle::Abort);
-
-        self.baum_welch = Some(baum);
-        self.sequence_values = Some(sequence_values.to_vec());
+        self.sequence_set = Some(sequence_set.clone());
         self.termination_criterion = Some(termination);
 
         Ok(())
@@ -253,19 +239,17 @@ impl HMMLearnerTrait for BaumWelchWrapper {
 
     fn learn(&mut self) -> Result<(Vec<State>, StartMatrix, TransitionMatrix), HMMLearnerError> {
         // Unwrap the object
-        let baum = self.baum_welch.as_mut().ok_or(HMMLearnerError::SetupNotPerformed)?;
-        let sequence_values = self.sequence_values.as_ref().unwrap();
+        let initial_states = self.initial_states.as_ref().ok_or(HMMLearnerError::SetupNotPerformed)?;
+        let sequence_set = self.sequence_set.as_ref().ok_or(HMMLearnerError::InitializationNotPerformed)?;
         let termination_criterion = self.termination_criterion.as_ref().unwrap().clone();
+        let initial_start_matrix = self.initial_start_matrix.as_ref().unwrap();
+        let initial_transition_matrix = self.initial_transition_matrix.as_ref().unwrap();
 
         // Run optimization
-        let (states_ref, start_matrix_ref, transition_matrix_ref) = 
-        baum.run_optimization(sequence_values, termination_criterion)
+        let (log_likelihood, states, start_matrix, transition_matrix) = run_baum_welch_on_sequence_set(sequence_set, initial_states.clone(), initial_start_matrix, initial_transition_matrix, &termination_criterion)
         .map_err(|err| HMMLearnerError::BaumWelchError { err })?;
 
-        let states = states_ref.to_vec();
-        let start_matrix = start_matrix_ref.clone();
-        let transition_matrix = transition_matrix_ref.clone();
-
+        self.log_likelihood = Some(log_likelihood);
 
         Ok((states, start_matrix, transition_matrix))
 
@@ -276,26 +260,17 @@ impl HMMLearnerTrait for BaumWelchWrapper {
     }
 
     fn get_log_likelihood(&self) -> Option<f64> {
-        if let Some(baum) = self.baum_welch.as_ref() {
-            let log_likelihood = baum.get_log_likelihood();
-            if log_likelihood.is_none() {return None}
-
-            return Some(log_likelihood.unwrap());
-        }
-
-        None
+        self.log_likelihood
     }
 
     fn reset(&mut self) {
-        self.baum_welch = None;
-        self.sequence_values = None;
+        self.sequence_set = None;
         self.termination_criterion = None
     }
 
     fn full_reset(&mut self) {
         self.setup_data = None;
-        self.baum_welch = None;
-        self.sequence_values = None;
+        self.sequence_set = None;
         self.termination_criterion = None
     }
 

@@ -1,3 +1,5 @@
+use rand::{thread_rng, Rng};
+
 use super::hmm_tools::{StateMatrix2D, StateMatrix3D};
 use super::optimization_tracker::{TerminationCriterium, StateCollapseHandle};
 use super::state::*;
@@ -485,4 +487,149 @@ pub enum InitMode {
     GivenInits,
     Random,
     Sparse,
+}
+
+pub fn add_jitter_to_states(states: &Vec<State>, rng: &mut impl Rng) -> Vec<State> {
+    let jittered_states= states
+    .iter()
+    .map(|state| {
+        let jitter_amount = state.get_value() / 100.0; // Jitter is 1% of the state's value
+        let new_value = state.get_value() + jitter_amount * (rng.gen::<f64>() - 0.5);
+        State::new(state.id, new_value, state.get_noise_std()).unwrap()
+    })
+    .collect();
+
+    jittered_states
+}
+
+pub fn add_jitter_to_state_values_vec(state_values: &Vec<f64>, rng: &mut impl Rng) -> Vec<f64> {
+    let jittered_values= state_values
+    .iter()
+    .map(|value| {
+        let jitter_amount = value / 100.0; // Jitter is 1% of the state's value
+        let new_value = value + jitter_amount * (rng.gen::<f64>() - 0.5);
+        new_value
+    })
+    .collect();
+
+    jittered_values
+} 
+
+pub fn set_initial_states_with_jitter_baum(
+    baum: &mut BaumWelch,
+    states: &Vec<State>,
+    rng: &mut impl Rng,
+    max_attempts: usize,
+) -> Result<(), BaumWelchError> {
+    let mut jittered_states: Vec<State> = states.clone();
+    for _attempt in 0..max_attempts {
+        // Attempt to set initial states
+        match baum.set_initial_states(jittered_states.clone()) {
+            Ok(()) => return Ok(()), // Success, return early
+            Err(BaumWelchError::InvalidInitialStateSet{error: HMMInstanceError::DuplicateStateValues}) => {
+                // Apply jitter only in case of DuplicateStateValues error
+                jittered_states = add_jitter_to_states(states, rng);
+
+            }
+            Err(e) => return Err(e), // For any other error, return immediately
+        }
+    }
+    Err(BaumWelchError::InvalidInitialStateSet{error: HMMInstanceError::DuplicateStateValues})
+}
+
+
+pub fn run_baum_welch_on_sequence_set(
+    sequence_set: &Vec<Vec<f64>>,
+    initial_states: Vec<State>,
+    initial_start_matrix: &StartMatrix,
+    initial_transition_matrix: &TransitionMatrix,
+    termination_criterion: &TerminationCriterium
+) -> Result<(f64, Vec<State>, StartMatrix, TransitionMatrix), BaumWelchError> {
+
+    let total_sequence_len: usize = sequence_set.iter().map(|sequence| sequence.len()).sum();
+    let num_states = initial_states.len();
+    let mut avg_log_likelihood: f64 = 0.0;
+    let mut avg_state_values: Vec<f64> = vec![0.0; num_states];
+    let mut avg_state_noise: Vec<f64> = vec![0.0; num_states];
+    let mut avg_start_matrix: Vec<f64> = vec![0.0; num_states];
+    let mut avg_transition_matrix: Vec<Vec<f64>> = vec![vec![0.0; num_states]; num_states];
+
+    for sequence_values in sequence_set {
+        // Setup the Baum-Welch algorithm
+        let mut baum = BaumWelch::new(num_states as u16);
+
+        let mut rng = thread_rng();
+        set_initial_states_with_jitter_baum(&mut baum, &initial_states, &mut rng, 1000).unwrap();
+        baum.set_initial_start_matrix(initial_start_matrix.clone()).unwrap();
+        baum.set_initial_transition_matrix(initial_transition_matrix.clone()).unwrap();
+        baum.set_state_collapse_handle(StateCollapseHandle::Abort);
+
+        let output_res = baum.run_optimization(&sequence_values, termination_criterion.clone());
+
+        let log_likelihood: f64;
+        let states: Option<Vec<State>>;
+        let start_matrix: Option<StartMatrix>;
+        let transition_matrix: Option<TransitionMatrix>;
+
+        if let Err(err) = output_res {
+            return Err(err)
+        } else {
+            log_likelihood = baum.take_log_likelihood().unwrap();
+            states = Some(baum.take_states().unwrap());
+            start_matrix = Some(baum.take_start_matrix().unwrap());
+            transition_matrix = Some(baum.take_transition_matrix().unwrap());
+        }
+
+        // Update weighted averages based on the sequence length
+        let current_sequence_len = sequence_values.len();
+        let coefficient = current_sequence_len as f64 / total_sequence_len as f64;
+        avg_log_likelihood += coefficient * log_likelihood;
+
+        for state in states.unwrap().iter() {
+            let id = state.get_id();
+            avg_state_values[id] += coefficient * state.get_value();
+            avg_state_noise[id] += coefficient * state.get_noise_std();
+        }
+
+        for (idx, value) in start_matrix.unwrap().matrix.iter().enumerate() {
+            avg_start_matrix[idx] += coefficient * value;
+        }
+
+        for (idx_row, row) in transition_matrix.unwrap().matrix.raw_matrix.iter().enumerate() {
+            for (idx_column, value) in row.iter().enumerate() {
+                avg_transition_matrix[idx_row][idx_column] += coefficient * value;
+            }
+        }
+    }
+
+    // Normalize start matrix
+    let sum: f64 = avg_start_matrix.iter().sum();
+    avg_start_matrix.iter_mut().for_each(|value| *value = *value / sum);
+
+    // Normalize transition matrix
+    for row in avg_transition_matrix.iter_mut() {
+        let sum: f64 = row.iter().sum();
+        row.iter_mut().for_each(|value| *value = *value / sum);
+    }
+
+
+    // Pack stuff
+    let mut new_state_res = HMMInstance::generate_state_set(&avg_state_values, &avg_state_noise);
+    let new_states: Vec<State>;
+    let mut rng = thread_rng();
+    loop {
+        if let Ok(new_state_value) = new_state_res.clone() {
+            new_states = new_state_value;
+            break;
+        } else {
+            let new_state_values = add_jitter_to_state_values_vec(&avg_state_values, &mut rng);
+            new_state_res = HMMInstance::generate_state_set(&new_state_values, &avg_state_noise);
+        }
+    }
+    let new_start_matrix = StartMatrix::new(avg_start_matrix);
+    let new_transition_matrix = TransitionMatrix::new(avg_transition_matrix);
+
+    Ok((avg_log_likelihood, new_states, new_start_matrix, new_transition_matrix))
+
+
 }
