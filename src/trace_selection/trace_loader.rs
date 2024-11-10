@@ -1,6 +1,5 @@
 use super::individual_trace::*;
 use super::point_traces::*;
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;

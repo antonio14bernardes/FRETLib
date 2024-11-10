@@ -263,9 +263,6 @@ impl PointTraces {
 
             let all_events = acceptor.detect_photobleaching_events(threshold, window_size);
 
-            let last_event = all_events.iter().max().unwrap_or(&0).clone();
-            let num_events = all_events.len();
-
             self.acceptor_photobleaching = Some(all_events);
         }
 

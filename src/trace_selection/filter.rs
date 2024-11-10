@@ -1,6 +1,3 @@
-use super::{individual_trace::PhotobleachingFilterValues, point_traces::{PointTraces, PointTracesError}};
-use std::cmp::Ordering;
-
 #[derive(Debug, Clone)]
 pub struct ValuesToFilter {
     pub donor_photobleaching: Vec<usize>, // (Last event, number of events)
@@ -26,16 +23,17 @@ pub struct MinMaxMeanStd {
 
 #[derive(Debug, Clone)]
 pub enum FilterTest {
-    PhotobleachingSteps,
-    DonorLifetime,
-    FretLifetime,
-    SNRSignal,
-    CorrelationCoefficient,
-    BackgroundNoise,
-    MeanTotalIntensity,
-    FRETFirstTimeStep,
-    HighestFRET,
-    AverageFRET,
+    PhotobleachingSteps { threshold: usize, received: usize },
+    DonorLifetime { min_required: usize, received: usize },
+    FretLifetime { min_required: usize, largest_received: usize },
+    SNRBackground { min_required: f64, received: f64 },
+    CorrelationCoefficient { max_allowed: f64, received: f64 },
+    BackgroundNoise { max_allowed: f64, received: f64 },
+    MeanTotalIntensity { allowed_range: [f64; 2], received_range: [f64; 2] }, // ranges are [min, max]
+    SNRSignal { min_required: f64, received: f64 },
+    FRETFirstTimeStep { min_required: f64, received: f64 },
+    HighestFRET { max_allowed: f64, received: f64 },
+    AverageFRET { max_allowed: f64, received: f64 },
 }
 
 
@@ -74,72 +72,119 @@ impl FilterSetup {
         }
     }
     
-    pub fn check_valid(&self, values_to_filter: ValuesToFilter) -> (bool, Vec<FilterTest>) {
+    pub fn check_valid(&self, values_to_filter: &ValuesToFilter) -> (bool, Vec<FilterTest>) {
         let mut failed_tests = Vec::new();
 
         // Photobleaching steps test
-        if !run_test(self.photobleaching_steps.as_ref(), values_to_filter.donor_photobleaching.len()) {
-            failed_tests.push(FilterTest::PhotobleachingSteps);
+        if let Some(threshold) = self.photobleaching_steps.as_ref() {
+            let received = values_to_filter.donor_photobleaching.len();
+            if !run_test(Some(threshold), received) {
+                failed_tests.push(FilterTest::PhotobleachingSteps { threshold: 1, received });
+            }
         }
 
         // Donor lifetime test
         let photobleaching_events = &values_to_filter.donor_photobleaching;
         if !photobleaching_events.is_empty() {
             let last_photobleach = photobleaching_events[photobleaching_events.len() - 1];
-            if !run_test(self.donor_lifetime.as_ref(), last_photobleach) {
-                failed_tests.push(FilterTest::DonorLifetime);
+            if let Some(min_required) = self.donor_lifetime.as_ref() {
+                if !run_test(Some(min_required), last_photobleach) {
+                    failed_tests.push(FilterTest::DonorLifetime { min_required: 50, received: last_photobleach });
+                }
             }
         }
 
         // FRET lifetime test
         let lifetimes = &values_to_filter.fret_lifetimes;
         if lifetimes.is_empty() && self.fret_lifetimes.is_some() {
-            failed_tests.push(FilterTest::FretLifetime);
+            failed_tests.push(FilterTest::FretLifetime { min_required: 15, largest_received: 0 });
         } else {
-            let largest_lifetime = lifetimes.iter().map(|lifetime| lifetime[1] - lifetime[0]).max().unwrap();
-            if !run_test(self.fret_lifetimes.as_ref(), largest_lifetime) {
-                failed_tests.push(FilterTest::FretLifetime);
+            let largest_lifetime = lifetimes.iter().map(|lifetime| lifetime[1]).max().unwrap_or(0);
+            if let Some(min_required) = self.fret_lifetimes.as_ref() {
+                if !run_test(Some(min_required), largest_lifetime) {
+                    failed_tests.push(FilterTest::FretLifetime { min_required: 15, largest_received: largest_lifetime });
+                }
             }
         }
 
-        // SNR signal test
-        if !run_test(self.snr_signal.as_ref(), values_to_filter.snr_signal) {
-            failed_tests.push(FilterTest::SNRSignal);
+        // SNR background test
+        if let Some(min_required) = self.snr_background.as_ref() {
+            let received = values_to_filter.snr_backgroung;
+            if !run_test(Some(min_required), received) {
+                failed_tests.push(FilterTest::SNRBackground { min_required: 8.0, received });
+            }
         }
 
         // Correlation coefficient test
-        if !run_test(self.correlation_coefficient.as_ref(), values_to_filter.correlation_coef) {
-            failed_tests.push(FilterTest::CorrelationCoefficient);
+        if let Some(max_allowed) = self.correlation_coefficient.as_ref() {
+            let received = values_to_filter.correlation_coef;
+            if !run_test(Some(max_allowed), received) {
+                failed_tests.push(FilterTest::CorrelationCoefficient { max_allowed: 0.5, received });
+            }
         }
 
         // Background noise test
-        if !run_test(self.background_noise.as_ref(), values_to_filter.background_std_post_bleach) {
-            failed_tests.push(FilterTest::BackgroundNoise);
+        if let Some(max_allowed) = self.background_noise.as_ref() {
+            let received = values_to_filter.background_std_post_bleach;
+            if !run_test(Some(max_allowed), received) {
+                failed_tests.push(FilterTest::BackgroundNoise { max_allowed: 70.0, received });
+            }
         }
 
         // Mean total intensity test
         if let Some(test) = &self.mean_total_intensity {
+
+            let min = values_to_filter.intensity_min_man_mean_std.min;
+            let max = values_to_filter.intensity_min_man_mean_std.max;
+            let mean = values_to_filter.intensity_min_man_mean_std.mean;
+            let std = values_to_filter.intensity_min_man_mean_std.std;
+
+            let mut n_fr = 0.0;
+
+            if let Comparison::WithinNStd { n } = test {
+                n_fr = *n as f64;
+            }
+
+            let allowed_range = [mean - n_fr * std, mean + n_fr * std];
+            let received_range = [min, max];
+            
             if !test.compare_min_max_mean_std(&values_to_filter.intensity_min_man_mean_std) {
-                failed_tests.push(FilterTest::MeanTotalIntensity);
+                failed_tests.push(FilterTest::MeanTotalIntensity { allowed_range, received_range });
+            }
+        }
+
+        // SNR signal test
+        if let Some(min_required) = self.snr_signal.as_ref() {
+            let received = values_to_filter.snr_signal;
+            if !run_test(Some(min_required), received) {
+                failed_tests.push(FilterTest::SNRSignal { min_required: 10.0, received });
             }
         }
 
         // FRET first time step test
-        if !run_test(self.fret_first_time_step.as_ref(), values_to_filter.first_fret) {
-            failed_tests.push(FilterTest::FRETFirstTimeStep);
+        if let Some(min_required) = self.fret_first_time_step.as_ref() {
+            let received = values_to_filter.first_fret;
+            if !run_test(Some(min_required), received) {
+                failed_tests.push(FilterTest::FRETFirstTimeStep { min_required: 0.2, received });
+            }
         }
 
         // Highest FRET test
-        if !run_test(self.highest_fret.as_ref(), values_to_filter.max_fret) {
-            failed_tests.push(FilterTest::HighestFRET);
+        if let Some(max_allowed) = self.highest_fret.as_ref() {
+            let received = values_to_filter.max_fret;
+            if !run_test(Some(max_allowed), received) {
+                failed_tests.push(FilterTest::HighestFRET { max_allowed: 0.9, received });
+            }
         }
 
         // Average FRET test
-        if !run_test(self.average_fret.as_ref(), values_to_filter.average_fret) {
-            failed_tests.push(FilterTest::AverageFRET);
+        if let Some(max_allowed) = self.average_fret.as_ref() {
+            let received = values_to_filter.average_fret;
+            if !run_test(Some(max_allowed), received) {
+                failed_tests.push(FilterTest::AverageFRET { max_allowed: 0.7, received });
+            }
         }
 
-        // Determine overall success based on whether any tests failed
         let success = failed_tests.is_empty();
         (success, failed_tests)
     }
