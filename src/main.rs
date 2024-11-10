@@ -61,7 +61,7 @@ fn main() {
         }).unwrap();
     hmm.add_initializer().unwrap();
 
-    let input = HMMInput::Initializer { num_states: real_states.len(), sequence_values: sequence_values };
+    let input = HMMInput::Initializer { num_states: real_states.len(), sequence_set: vec![sequence_values] };
 
     hmm.run(input).unwrap();
 

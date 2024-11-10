@@ -29,9 +29,9 @@ impl HMM {
 
         // If input is compatible:
         if let HMMInput::Analyzer
-        { sequence_values, states, start_matrix, transition_matrix } = input {
+        { sequence_set, states, start_matrix, transition_matrix } = input {
             // Setup Analyzer
-            self.analyzer.setup(&sequence_values, states, start_matrix, transition_matrix)
+            self.analyzer.setup(&sequence_set, states, start_matrix, transition_matrix)
             .map_err(|err| HMMError::AnalyzerError { err })?;
             
             // Run Analyzer
@@ -85,23 +85,23 @@ impl HMM {
         Ok(())
     }
 
-    fn run_learner(&mut self, input: HMMInput) -> Result<((Vec<State>, StartMatrix, TransitionMatrix), Vec<f64>), HMMError> {
+    fn run_learner(&mut self, input: HMMInput) -> Result<((Vec<State>, StartMatrix, TransitionMatrix), Vec<Vec<f64>>), HMMError> {
         // Check if learner has been added
         if self.learner.is_none() {return Err(HMMError::LearnerNotDefined)}
         let learner = self.learner.as_mut().unwrap();
 
         // If input is compatible:
         if let HMMInput::Learner 
-        { num_states, sequence_values, learner_init } = input {
+        { num_states, sequence_set, learner_init } = input {
             // Initialize learner
-            learner.initialize_learner(num_states, &sequence_values, learner_init)
+            learner.initialize_learner(num_states, &sequence_set, learner_init)
             .map_err(|err| HMMError::LearnerError { err })?;
 
             // Run learner
             let learned_output = 
             learner.learn().map_err(|err| HMMError::LearnerError { err })?;
 
-            Ok((learned_output, sequence_values))
+            Ok((learned_output, sequence_set))
 
         } else {
             return Err(HMMError::IncompatibleInput { expected: HMMComponent::Learner });
@@ -140,18 +140,18 @@ impl HMM {
         Ok(())
     }
 
-    fn run_initializer(&mut self, input: HMMInput) -> Result<(LearnerSpecificInitialValues, usize, Vec<f64>), HMMError> {
+    fn run_initializer(&mut self, input: HMMInput) -> Result<(LearnerSpecificInitialValues, usize, Vec<Vec<f64>>), HMMError> {
         // Check if learner has been added
         if self.initializer.is_none() {return Err(HMMError::InitializerNotDefined)}
         let initializer = self.initializer.as_mut().unwrap();
 
         // If input is compatible:
-        if let HMMInput::Initializer { num_states, sequence_values }= input {
+        if let HMMInput::Initializer { num_states, sequence_set }= input {
             // Run Initializer
-            let init_output = initializer.get_intial_values(&sequence_values, num_states)
+            let init_output = initializer.get_intial_values(&sequence_set, num_states)
             .map_err(|err| HMMError::InitializerError { err })?;
 
-            Ok((init_output, num_states, sequence_values))
+            Ok((init_output, num_states, sequence_set))
 
         } else {
             return Err(HMMError::IncompatibleInput { expected: HMMComponent::Initializer });
@@ -179,18 +179,18 @@ impl HMM {
         Ok(())
     }
 
-    fn run_num_states_finder(&mut self, input: HMMInput) -> Result<(usize, Vec<f64>), HMMError> {
+    fn run_num_states_finder(&mut self, input: HMMInput) -> Result<(usize, Vec<Vec<f64>>), HMMError> {
         // Check if learner has been added
         if self.num_states_finder.is_none() {return Err(HMMError::NumStatesFinderNotDefined)}
         let num_states_finder = self.num_states_finder.as_mut().unwrap();
 
         // If input is compatible:
-        if let HMMInput::NumStatesFinder{sequence_values} = input {
+        if let HMMInput::NumStatesFinder{sequence_set} = input {
             // Run NumStatesFinder
-            let num_states = num_states_finder.get_number_of_states(&sequence_values)
+            let num_states = num_states_finder.get_number_of_states(&sequence_set)
             .map_err(|err| HMMError::NumStatesFinderError { err})?;
 
-            Ok((num_states, sequence_values))
+            Ok((num_states, sequence_set))
 
         } else {
             return Err(HMMError::IncompatibleInput { expected: HMMComponent::NumStatesFinder });
@@ -200,25 +200,25 @@ impl HMM {
     pub fn run(&mut self, input: HMMInput) -> Result<(), HMMError> {
         let mut current_input = input;
         if self.num_states_finder.is_some() {
-            let (num_states, sequence_values) = self.run_num_states_finder(current_input)?;
+            let (num_states, sequence_set) = self.run_num_states_finder(current_input)?;
 
-            current_input = HMMInput::Initializer { num_states, sequence_values};
+            current_input = HMMInput::Initializer { num_states, sequence_set};
             println!("Ran Num states finder");
 
         }
         if self.initializer.is_some(){
-            let (learner_init, num_states, sequence_values) = 
+            let (learner_init, num_states, sequence_set) = 
             self.run_initializer(current_input)?;
 
-            current_input = HMMInput::Learner { num_states, sequence_values, learner_init };
+            current_input = HMMInput::Learner { num_states, sequence_set, learner_init };
             println!("Ran Initializer");
 
         }
         if self.learner.is_some() {
-            let ((states, start_matrix, transition_matrix), sequence_values) = 
+            let ((states, start_matrix, transition_matrix), sequence_set) = 
             self.run_learner(current_input)?;
 
-            current_input = HMMInput::Analyzer { sequence_values, states, start_matrix, transition_matrix };
+            current_input = HMMInput::Analyzer { sequence_set, states, start_matrix, transition_matrix };
 
             println!("Ran Learner");
         }
@@ -237,10 +237,10 @@ impl HMM {
 
 #[derive(Debug)]
 pub enum HMMInput {
-    NumStatesFinder{sequence_values: Vec<f64>},
-    Initializer{num_states: usize, sequence_values: Vec<f64>},
-    Learner{num_states: usize, sequence_values: Vec<f64>, learner_init: LearnerSpecificInitialValues},
-    Analyzer{sequence_values: Vec<f64>, states: Vec<State>, start_matrix: StartMatrix, transition_matrix: TransitionMatrix},
+    NumStatesFinder{sequence_set: Vec<Vec<f64>>},
+    Initializer{num_states: usize, sequence_set: Vec<Vec<f64>>},
+    Learner{num_states: usize, sequence_set: Vec<Vec<f64>>, learner_init: LearnerSpecificInitialValues},
+    Analyzer{sequence_set: Vec<Vec<f64>>, states: Vec<State>, start_matrix: StartMatrix, transition_matrix: TransitionMatrix},
 }
 
 #[derive(Debug)]
@@ -275,7 +275,7 @@ mod tests {
 
     use super::*;
     
-    fn create_test_sequence() -> (Vec<State>, StartMatrix, TransitionMatrix, Vec<f64>, Vec<usize>) {
+    fn create_test_sequence_set() -> (Vec<State>, StartMatrix, TransitionMatrix, Vec<Vec<f64>>, Vec<Vec<usize>>) {
         // Define real states
         let real_state1 = State::new(0, 10.0, 1.0).unwrap();
         let real_state2 = State::new(1, 20.0, 2.0).unwrap();
@@ -292,10 +292,19 @@ mod tests {
             vec![0.2, 0.05, 0.75],
         ]);
 
-        // Generate the sequence
-        let (sequence_ids, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 1000);
+         // Generate multiple sequences as the sequence set
+        let mut sequence_set = Vec::new();
+        let mut sequence_ids_set = Vec::new();
 
-        (real_states, real_start_matrix, real_transition_matrix, sequence_values, sequence_ids)
+        for _ in 0..5 {
+            let (sequence_ids, sequence_values) = 
+                HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 200);
+            
+            sequence_set.push(sequence_values);
+            sequence_ids_set.push(sequence_ids);
+        }
+
+        (real_states, real_start_matrix, real_transition_matrix, sequence_set, sequence_ids_set)
     }
 
     fn remap_states(predicted_states: &Vec<State>, real_states: &Vec<State>) -> HashMap<usize, usize> {
@@ -325,14 +334,14 @@ mod tests {
     #[test]
     fn test_analysis_only() {
         // Generate test sequence
-        let (states, start_matrix, transition_matrix, sequence_values, sequence_ids) = create_test_sequence();
+        let (states, start_matrix, transition_matrix, sequence_set, sequence_ids) = create_test_sequence_set();
 
         // Create an HMM instance and run the analysis
         let mut hmm = HMM::new();
         
         // Run the analyzer
         let input = HMMInput::Analyzer { 
-            sequence_values: sequence_values.clone(), 
+            sequence_set: sequence_set.clone(), 
             states: states.clone(), 
             start_matrix: start_matrix.clone(), 
             transition_matrix: transition_matrix.clone() 
@@ -344,14 +353,23 @@ mod tests {
         
         // Check if analysis is correct
         let analyzer = hmm.get_analyzer();
-        let analyzed_sequence_states = analyzer.get_states_sequence().expect("No state sequence in analyzer");
+        let analyzed_sequence_states = analyzer.get_state_sequences().expect("No state sequence in analyzer");
 
 
         // Calculate the percentage match for state sequences
-        let state_matches = sequence_ids.iter().zip(analyzed_sequence_states.iter())
-            .filter(|(original, analyzed)| original == analyzed)
-            .count();
-        let state_match_percentage = (state_matches as f64 / sequence_ids.len() as f64) * 100.0;
+        let mut num_matches: usize = 0;
+        let total_len: usize = sequence_ids.iter().map(|sequence| sequence.len()).sum();
+
+        for (analyzed_sequence, real_sequence) in analyzed_sequence_states.iter().zip(sequence_ids.iter()) {
+            // Calculate matches for the current sequence
+            let sequence_matches = real_sequence.iter().zip(analyzed_sequence.iter())
+                .filter(|(original, analyzed)| original == analyzed)
+                .count();
+
+            num_matches += sequence_matches;
+        }
+
+        let state_match_percentage = 100.0 * num_matches as f64 / total_len as f64;
         println!("State match percentage: {:.2}%", state_match_percentage);
 
         // Define acceptable match thresholds
@@ -364,7 +382,7 @@ mod tests {
     #[test]
     fn test_learning_analysis() {
         // Generate test sequence
-        let (states, _start_matrix, _transition_matrix, sequence_values, sequence_ids) = create_test_sequence();
+        let (states, _start_matrix, _transition_matrix, sequence_set, sequence_ids) = create_test_sequence_set();
 
         let mut fake_states = Vec::new();
         for (i,state) in states.iter().enumerate() {
@@ -381,7 +399,7 @@ mod tests {
         let input = HMMInput::Learner 
         { 
             num_states: states.len(),
-            sequence_values: sequence_values.clone(),
+            sequence_set: sequence_set.clone(),
             learner_init: LearnerSpecificInitialValues::BaumWelch { states: fake_states, start_matrix: None, transition_matrix: None } };
 
         let result = hmm.run(input);
@@ -391,14 +409,23 @@ mod tests {
         
         // Check if analysis is correct
         let analyzer = hmm.get_analyzer();
-        let analyzed_sequence_states = analyzer.get_states_sequence().expect("No state sequence in analyzer");
+        let analyzed_sequence_states = analyzer.get_state_sequences().expect("No state sequence in analyzer");
 
 
         // Calculate the percentage match for state sequences
-        let state_matches = sequence_ids.iter().zip(analyzed_sequence_states.iter())
-            .filter(|(original, analyzed)| original == analyzed)
-            .count();
-        let state_match_percentage = (state_matches as f64 / sequence_ids.len() as f64) * 100.0;
+        let mut num_matches: usize = 0;
+        let total_len: usize = sequence_ids.iter().map(|sequence| sequence.len()).sum();
+
+        for (analyzed_sequence, real_sequence) in analyzed_sequence_states.iter().zip(sequence_ids.iter()) {
+            // Calculate matches for the current sequence
+            let sequence_matches = real_sequence.iter().zip(analyzed_sequence.iter())
+                .filter(|(original, analyzed)| original == analyzed)
+                .count();
+
+            num_matches += sequence_matches;
+        }
+
+        let state_match_percentage = 100.0 * num_matches as f64 / total_len as f64;
         println!("State match percentage: {:.2}%", state_match_percentage);
 
         // Define acceptable match thresholds
@@ -411,7 +438,7 @@ mod tests {
     #[test]
     fn test_initialization_learning_analysis() {
         // Generate test sequence
-        let (states, _start_matrix, _transition_matrix, sequence_values, sequence_ids) = create_test_sequence();
+        let (states, _start_matrix, _transition_matrix, sequence_set, sequence_ids) = create_test_sequence_set();
 
         // Create an HMM instance
         let mut hmm = HMM::new();
@@ -425,7 +452,7 @@ mod tests {
         // Input to the initializer with a specified number of states
         let input = HMMInput::Initializer { 
             num_states: states.len(), 
-            sequence_values: sequence_values.clone() 
+            sequence_set: sequence_set.clone() 
         };
 
         // Run the initializer step
@@ -434,36 +461,52 @@ mod tests {
 
         // Check if analysis is correct
         let analyzer = hmm.get_analyzer();
-        let analyzed_sequence_states = analyzer.get_states_sequence().expect("No state sequence in analyzer");
+        let analyzed_sequences_states = analyzer.get_state_sequences().expect("No state sequence in analyzer");
+
+        // Ensure that we have a state sequence for each sequence in the set
+        assert_eq!(analyzed_sequences_states.len(), sequence_ids.len(), "Mismatch in number of state sequences");
 
         // Get the remapped state indices based on closest matching states
         let predicted_states = analyzer.get_states().unwrap();
         let state_mapping = remap_states(predicted_states, &states);
 
-        // Apply the mapping to the analyzed sequence states
-        let remapped_analyzed_states: Vec<usize> = analyzed_sequence_states
-            .iter()
-            .map(|&pred_index| *state_mapping.get(&pred_index).unwrap_or(&pred_index)) // Default to the same index if no mapping found
-            .collect();
+        // Calculate the match percentage for each sequence
+        let mut total_matches = 0;
+        let mut total_elements = 0;
 
-        // Calculate the percentage match for remapped state sequences
-        let state_matches = sequence_ids.iter().zip(remapped_analyzed_states.iter())
-            .filter(|(original, remapped)| original == remapped)
-            .count();
-        let state_match_percentage = (state_matches as f64 / sequence_ids.len() as f64) * 100.0;
+        for (sequence_ids, analyzed_states) in sequence_ids.iter().zip(analyzed_sequences_states.iter()) {
+            // Apply the mapping to the analyzed sequence states
+            let remapped_analyzed_states: Vec<usize> = analyzed_states
+                .iter()
+                .map(|&pred_index| *state_mapping.get(&pred_index).unwrap_or(&pred_index)) // Default to same index if no mapping found
+                .collect();
+
+            // Calculate matches for the current sequence
+            let sequence_matches = sequence_ids.iter().zip(remapped_analyzed_states.iter())
+                .filter(|(original, remapped)| original == remapped)
+                .count();
+
+            total_matches += sequence_matches;
+            total_elements += sequence_ids.len();
+        }
+
+        let state_match_percentage = (total_matches as f64 / total_elements as f64) * 100.0;
         println!("State match percentage after remapping: {:.2}%", state_match_percentage);
 
-        // Define acceptable match thresholds
+        // Define acceptable match threshold
         let acceptable_state_match_threshold = 95.0; // 95% match
 
-        // Assert that match percentages are above acceptable thresholds
-        assert!(state_match_percentage >= acceptable_state_match_threshold, "State sequence match percentage below threshold: {:.2}%", state_match_percentage);
+        // Assert that match percentages are above acceptable threshold
+        assert!(
+            state_match_percentage >= acceptable_state_match_threshold, 
+            "State sequence match percentage below threshold: {:.2}%", state_match_percentage
+        );
     }
 
     #[test]
     fn test_nsfinder_initialization_learning_analysis() {
         // Generate test sequence
-        let (states, _start_matrix, _transition_matrix, sequence_values, sequence_ids) = create_test_sequence();
+        let (states, _start_matrix, _transition_matrix, sequence_set, sequence_ids) = create_test_sequence_set();
 
         // Create an HMM instance
         let mut hmm = HMM::new();
@@ -478,7 +521,7 @@ mod tests {
         hmm.add_number_of_states_finder().unwrap();
 
         // Input to the initializer with a specified number of states
-        let input = HMMInput::NumStatesFinder { sequence_values };
+        let input = HMMInput::NumStatesFinder { sequence_set };
 
         // Run the initializer step
         let result = hmm.run(input);
@@ -486,29 +529,45 @@ mod tests {
 
         // Check if analysis is correct
         let analyzer = hmm.get_analyzer();
-        let analyzed_sequence_states = analyzer.get_states_sequence().expect("No state sequence in analyzer");
+        let analyzed_sequences_states = analyzer.get_state_sequences().expect("No state sequence in analyzer");
+
+        // Ensure that we have a state sequence for each sequence in the set
+        assert_eq!(analyzed_sequences_states.len(), sequence_ids.len(), "Mismatch in number of state sequences");
 
         // Get the remapped state indices based on closest matching states
         let predicted_states = analyzer.get_states().unwrap();
         let state_mapping = remap_states(predicted_states, &states);
 
-        // Apply the mapping to the analyzed sequence states
-        let remapped_analyzed_states: Vec<usize> = analyzed_sequence_states
-            .iter()
-            .map(|&pred_index| *state_mapping.get(&pred_index).unwrap_or(&pred_index)) // Default to the same index if no mapping found
-            .collect();
+        // Calculate the match percentage for each sequence
+        let mut total_matches = 0;
+        let mut total_elements = 0;
 
-        // Calculate the percentage match for remapped state sequences
-        let state_matches = sequence_ids.iter().zip(remapped_analyzed_states.iter())
-            .filter(|(original, remapped)| original == remapped)
-            .count();
-        let state_match_percentage = (state_matches as f64 / sequence_ids.len() as f64) * 100.0;
+        for (sequence_ids, analyzed_states) in sequence_ids.iter().zip(analyzed_sequences_states.iter()) {
+            // Apply the mapping to the analyzed sequence states
+            let remapped_analyzed_states: Vec<usize> = analyzed_states
+                .iter()
+                .map(|&pred_index| *state_mapping.get(&pred_index).unwrap_or(&pred_index)) // Default to same index if no mapping found
+                .collect();
+
+            // Calculate matches for the current sequence
+            let sequence_matches = sequence_ids.iter().zip(remapped_analyzed_states.iter())
+                .filter(|(original, remapped)| original == remapped)
+                .count();
+
+            total_matches += sequence_matches;
+            total_elements += sequence_ids.len();
+        }
+
+        let state_match_percentage = (total_matches as f64 / total_elements as f64) * 100.0;
         println!("State match percentage after remapping: {:.2}%", state_match_percentage);
 
-        // Define acceptable match thresholds
+        // Define acceptable match threshold
         let acceptable_state_match_threshold = 95.0; // 95% match
 
-        // Assert that match percentages are above acceptable thresholds
-        assert!(state_match_percentage >= acceptable_state_match_threshold, "State sequence match percentage below threshold: {:.2}%", state_match_percentage);
+        // Assert that match percentages are above acceptable threshold
+        assert!(
+            state_match_percentage >= acceptable_state_match_threshold, 
+            "State sequence match percentage below threshold: {:.2}%", state_match_percentage
+        );
     }
 }

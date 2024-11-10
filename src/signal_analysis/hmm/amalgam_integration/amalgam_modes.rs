@@ -76,12 +76,12 @@ pub fn get_variable_subsets(num_states: usize, dependence_type: &AmalgamDependen
     Ok(dependencies)
 }
 
-pub fn get_constraints(num_states: usize, sequence_values: &[f64], dependence_type: &AmalgamDependencies, fitness_type: &AmalgamFitness) -> Result<Vec<OptimizationConstraint<f64>>, HMMLearnerError> {
+pub fn get_constraints(num_states: usize, sequence_set: &Vec<Vec<f64>>, dependence_type: &AmalgamDependencies, fitness_type: &AmalgamFitness) -> Result<Vec<OptimizationConstraint<f64>>, HMMLearnerError> {
     if num_states == 0 {return Err(HMMLearnerError::InvalidNumberOfStates)};
     let mut constraints: Vec<OptimizationConstraint<f64>> = Vec::new();
 
-    let min_value= sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-    let max_value= sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+    let min_value= sequence_set.iter().map(|sequence| sequence.iter().min_by(|a, b| a.total_cmp(b)).unwrap()).min_by(|a, b| a.total_cmp(b)).unwrap();
+    let max_value = sequence_set.iter().map(|sequence| sequence.iter().max_by(|a, b| a.total_cmp(b)).unwrap()).max_by(|a, b| a.total_cmp(b)).unwrap();
     let range = max_value - min_value;
     // Define the noise limits as such:
     let max_noise = range / (num_states as f64) * MAX_NOISE_MULT;
@@ -127,7 +127,7 @@ pub fn get_constraints(num_states: usize, sequence_values: &[f64], dependence_ty
 pub fn get_amalgam_object(
     iter_memory: bool,
     num_states: usize,
-    sequence_values: &[f64],
+    sequence_set: &Vec<Vec<f64>>,
     dependence_type: &AmalgamDependencies,
     fitness_type: &AmalgamFitness
 ) -> Result<AmalgamIdea<AmalgamHMMFitnessFunction, AmalgamHMMFitness>, HMMLearnerError>
@@ -142,7 +142,7 @@ pub fn get_amalgam_object(
 
     let mut amalgam: AmalgamIdea<AmalgamHMMFitnessFunction, AmalgamHMMFitness> = AmalgamIdea::new(prob_size, iter_memory);
 
-    let fitness_fn = AmalgamHMMFitnessFunction::new(num_states, sequence_values, fitness_type);
+    let fitness_fn = AmalgamHMMFitnessFunction::new(num_states, sequence_set, fitness_type);
     amalgam.set_fitness_function(fitness_fn);
 
     // Get the subsets
@@ -151,7 +151,7 @@ pub fn get_amalgam_object(
     .map_err(|err| HMMLearnerError::AmalgamIdeaError { err })?;
 
     // Get the constraints
-    let constraints = get_constraints(num_states, sequence_values, dependence_type, fitness_type)?;
+    let constraints = get_constraints(num_states, sequence_set, dependence_type, fitness_type)?;
     amalgam.set_constraints(constraints)
     .map_err(|err| HMMLearnerError::AmalgamIdeaError { err })?;
 
@@ -199,32 +199,62 @@ mod tests {
     }
 
     #[test]
-    fn test_get_variable_subsets_compact() {
+    fn test_get_constraints_all_independent_direct() {
         let num_states = 3;
-        let dependence_type = AmalgamDependencies::StateCompact;
-
-        // For direct fit function
+        let sequence_set = vec![vec![0.1, 1.0, 0.5, 2.0], vec![0.3, 1.5, 0.7, 2.5]];
+        let dependence_type = AmalgamDependencies::AllIndependent;
         let fitness_type = AmalgamFitness::Direct;
-        let expected_subsets = vec![
-            vec![0,3], vec![1,4], vec![2,5],
-            vec![6, 7, 8],
-            vec![9, 10, 11], vec![12, 13, 14], vec![15, 16, 17]
-        ];
 
-        let subsets = get_variable_subsets(num_states, &dependence_type, &fitness_type).unwrap();
+        let constraints = get_constraints(num_states, &sequence_set, &dependence_type, &fitness_type).unwrap();
 
-        assert_eq!(subsets, expected_subsets, "Obtained subsets do not equal the expected subsets for Direct");
+        let expected_count = 2 * num_states + 1 + num_states;
+        assert_eq!(constraints.len(), expected_count);
 
-        // For baum welch fit function
-        let fitness_type = AmalgamFitness::BaumWelch;
-        let expected_subsets = vec![
-            vec![0,3], vec![1,4], vec![2,5],
+        let min_value = sequence_set.iter().flatten().cloned().fold(f64::INFINITY, f64::min);
+        let max_value = sequence_set.iter().flatten().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let range = max_value - min_value;
+        let max_noise = range / (num_states as f64) * MAX_NOISE_MULT;
+        let min_noise = max_noise * MIN_NOISE_MULT;
 
-        ];
+        // Check state values constraints
+        for i in 0..num_states {
+            match &constraints[i] {
+                OptimizationConstraint::MaxMinValue { max, min } => {
+                    assert_eq!(max[0], max_value, "Expected max state value {}", max_value);
+                    assert_eq!(min[0], min_value, "Expected min state value {}", min_value);
+                },
+                _ => panic!("Expected MaxMinValue constraint for state values"),
+            }
+        }
 
-        let subsets = get_variable_subsets(num_states, &dependence_type, &fitness_type).unwrap();
+        // Check noise constraints
+        for i in num_states..2 * num_states {
+            match &constraints[i] {
+                OptimizationConstraint::MaxMinValue { max, min } => {
+                    assert_eq!(max[0], max_noise, "Expected max noise value {}", max_noise);
+                    assert_eq!(min[0], min_noise, "Expected min noise value {}", min_noise);
+                },
+                _ => panic!("Expected MaxMinValue constraint for noise values"),
+            }
+        }
 
-        assert_eq!(subsets, expected_subsets, "Obtained subsets do not equal the expected subsets for BaumWelch");
+        // Start matrix constraint
+        match &constraints[2 * num_states] {
+            OptimizationConstraint::PositiveSumTo { sum } => {
+                assert_eq!(*sum, 1.0, "Expected start matrix sum to be 1.0");
+            },
+            _ => panic!("Expected PositiveSumTo constraint for start matrix"),
+        }
+
+        // Transition matrix constraints
+        for i in (2 * num_states + 1)..constraints.len() {
+            match &constraints[i] {
+                OptimizationConstraint::PositiveSumTo { sum } => {
+                    assert_eq!(*sum, 1.0, "Expected transition matrix row sum to be 1.0");
+                },
+                _ => panic!("Expected PositiveSumTo constraint for transition matrix row"),
+            }
+        }
     }
     
     #[test]
@@ -258,80 +288,20 @@ mod tests {
     }
 
     #[test]
-    fn test_get_constraints_all_independent_direct() {
-        let num_states = 3;
-        let sequence_values = vec![0.1, 1.0, 0.5, 2.0];
-        let dependence_type = AmalgamDependencies::AllIndependent;
-        let fitness_type = AmalgamFitness::Direct;
-
-        let constraints = get_constraints(num_states, &sequence_values, &dependence_type, &fitness_type).unwrap();
-
-        // Expected constraint count: 2 * num_states for states and noises + 1 for start matrix + num_states for transition matrix
-        let expected_count = 2 * num_states + 1 + num_states;
-        assert_eq!(constraints.len(), expected_count);
-
-        let min_value = *sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-        let max_value = *sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
-        let range = max_value - min_value;
-        let max_noise = range / (num_states as f64) * MAX_NOISE_MULT;
-        let min_noise = max_noise * MIN_NOISE_MULT;
-
-        // Check the structure of the state value constraints
-        for i in 0..num_states {
-            match &constraints[i] {
-                OptimizationConstraint::MaxMinValue { max, min } => {
-                    assert_eq!(max[0], max_value, "Expected max value for state values to be {}", max_value);
-                    assert_eq!(min[0], min_value, "Expected min value for state values to be {}", min_value);
-                },
-                _ => panic!("Expected MaxMinValue constraint for state values"),
-            }
-        }
-
-        // Check the structure of the noise constraints
-        for i in num_states..2 * num_states {
-            match &constraints[i] {
-                OptimizationConstraint::MaxMinValue { max, min } => {
-                    assert_eq!(max[0], max_noise, "Expected max value for noise to be {}", max_noise);
-                    assert_eq!(min[0], min_noise, "Expected min value for noise to be {}", min_noise);
-                },
-                _ => panic!("Expected MaxMinValue constraint for state noises"),
-            }
-        }
-
-        // Check the start matrix constraint
-        match &constraints[2 * num_states] {
-            OptimizationConstraint::PositiveSumTo { sum } => {
-                assert_eq!(*sum, 1.0, "Expected start matrix to have PositiveSumTo constraint with sum 1.0");
-            },
-            _ => panic!("Expected PositiveSumTo constraint for start matrix"),
-        }
-
-        // Check the transition matrix constraints
-        for i in (2 * num_states + 1)..constraints.len() {
-            match &constraints[i] {
-                OptimizationConstraint::PositiveSumTo { sum } => {
-                    assert_eq!(*sum, 1.0, "Expected transition matrix row to have PositiveSumTo constraint with sum 1.0");
-                },
-                _ => panic!("Expected PositiveSumTo constraint for transition matrix row"),
-            }
-        }
-    }
-
-    #[test]
     fn test_get_constraints_state_compact_direct() {
         let num_states = 3;
-        let sequence_values = vec![0.1, 1.0, 0.5, 2.0];
+        let sequence_set = vec![vec![0.1, 1.0, 0.5, 2.0], vec![0.3, 1.5, 0.7, 2.5]];
         let dependence_type = AmalgamDependencies::StateCompact;
         let fitness_type = AmalgamFitness::Direct;
 
-        let constraints = get_constraints(num_states, &sequence_values, &dependence_type, &fitness_type).unwrap();
+        let constraints = get_constraints(num_states, &sequence_set, &dependence_type, &fitness_type).unwrap();
 
         // Expected constraint count: num_states for combined state/noise + 1 for start matrix + num_states for transition matrix
         let expected_count = num_states + 1 + num_states;
         assert_eq!(constraints.len(), expected_count);
 
-        let min_value = *sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-        let max_value = *sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+        let min_value = sequence_set.iter().flatten().cloned().fold(f64::INFINITY, f64::min);
+        let max_value = sequence_set.iter().flatten().cloned().fold(f64::NEG_INFINITY, f64::max);
         let range = max_value - min_value;
         let max_noise = range / (num_states as f64) * MAX_NOISE_MULT;
         let min_noise = max_noise * MIN_NOISE_MULT;
@@ -371,17 +341,17 @@ mod tests {
     #[test]
     fn test_get_constraints_values_dependent_direct() {
         let num_states = 3;
-        let sequence_values = vec![0.1, 1.0, 0.5, 2.0];
+        let sequence_set = vec![vec![0.1, 1.0, 0.5, 2.0], vec![0.3, 1.5, 0.7, 2.5]];
         let dependence_type = AmalgamDependencies::ValuesDependent;
         let fitness_type = AmalgamFitness::Direct;
 
-        let constraints = get_constraints(num_states, &sequence_values, &dependence_type, &fitness_type).unwrap();
+        let constraints = get_constraints(num_states, &sequence_set, &dependence_type, &fitness_type).unwrap();
         // Expected constraints for ValuesDependent with Direct fitness:
         // A single constraint for state values and one for state noises, followed by constraints for start and transition matrices.
         assert_eq!(constraints.len(), 6);
 
-        let min_value = *sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-        let max_value = *sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+        let min_value = sequence_set.iter().flatten().cloned().fold(f64::INFINITY, f64::min);
+        let max_value = sequence_set.iter().flatten().cloned().fold(f64::NEG_INFINITY, f64::max);
         let range = max_value - min_value;
         let max_noise = range / (num_states as f64) * MAX_NOISE_MULT;
         let _min_noise = max_noise * MIN_NOISE_MULT;
@@ -418,18 +388,18 @@ mod tests {
     #[test]
     fn test_get_constraints_all_independent_baumwelch() {
         let num_states = 3;
-        let sequence_values = vec![0.1, 1.0, 0.5, 2.0];
+        let sequence_set = vec![vec![0.1, 1.0, 0.5, 2.0], vec![0.3, 1.5, 0.7, 2.5]];
         let dependence_type = AmalgamDependencies::AllIndependent;
         let fitness_type = AmalgamFitness::BaumWelch;
 
-        let constraints = get_constraints(num_states, &sequence_values, &dependence_type, &fitness_type).unwrap();
+        let constraints = get_constraints(num_states, &sequence_set, &dependence_type, &fitness_type).unwrap();
 
         // Expected constraint count: 2 * num_states for states and noises only (no start or transition matrix constraints)
         let expected_count = 2 * num_states;
         assert_eq!(constraints.len(), expected_count);
 
-        let min_value = *sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-        let max_value = *sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+        let min_value = sequence_set.iter().flatten().cloned().fold(f64::INFINITY, f64::min);
+        let max_value = sequence_set.iter().flatten().cloned().fold(f64::NEG_INFINITY, f64::max);
         let range = max_value - min_value;
         let max_noise = range / (num_states as f64) * MAX_NOISE_MULT;
         let min_noise = max_noise * MIN_NOISE_MULT;
@@ -460,18 +430,18 @@ mod tests {
     #[test]
     fn test_get_constraints_state_compact_baumwelch() {
         let num_states = 3;
-        let sequence_values = vec![0.1, 1.0, 0.5, 2.0];
+        let sequence_set = vec![vec![0.1, 1.0, 0.5, 2.0], vec![0.3, 1.5, 0.7, 2.5]];
         let dependence_type = AmalgamDependencies::StateCompact;
         let fitness_type = AmalgamFitness::BaumWelch;
 
-        let constraints = get_constraints(num_states, &sequence_values, &dependence_type, &fitness_type).unwrap();
+        let constraints = get_constraints(num_states, &sequence_set, &dependence_type, &fitness_type).unwrap();
 
         // Expected constraint count: num_states for combined state/noise only (no start or transition matrix constraints)
         let expected_count = num_states;
         assert_eq!(constraints.len(), expected_count);
 
-        let min_value = *sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-        let max_value = *sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+        let min_value = sequence_set.iter().flatten().cloned().fold(f64::INFINITY, f64::min);
+        let max_value = sequence_set.iter().flatten().cloned().fold(f64::NEG_INFINITY, f64::max);
         let range = max_value - min_value;
         let max_noise = range / (num_states as f64) * MAX_NOISE_MULT;
         let min_noise = max_noise * MIN_NOISE_MULT;
@@ -493,18 +463,18 @@ mod tests {
     #[test]
     fn test_get_constraints_values_dependent_baumwelch() {
         let num_states = 3;
-        let sequence_values = vec![0.1, 1.0, 0.5, 2.0];
+        let sequence_set = vec![vec![0.1, 1.0, 0.5, 2.0], vec![0.3, 1.5, 0.7, 2.5]];
         let dependence_type = AmalgamDependencies::ValuesDependent;
         let fitness_type = AmalgamFitness::BaumWelch;
 
-        let constraints = get_constraints(num_states, &sequence_values, &dependence_type, &fitness_type).unwrap();
+        let constraints = get_constraints(num_states, &sequence_set, &dependence_type, &fitness_type).unwrap();
 
         // Expected constraints for ValuesDependent with BaumWelch fitness:
         // A single constraint for state values and one for state noises only (no start or transition matrix constraints)
         assert_eq!(constraints.len(), 2);
 
-        let min_value = *sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-        let max_value = *sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+        let min_value = sequence_set.iter().flatten().cloned().fold(f64::INFINITY, f64::min);
+        let max_value = sequence_set.iter().flatten().cloned().fold(f64::NEG_INFINITY, f64::max);
         let range = max_value - min_value;
         let max_noise = range / (num_states as f64) * MAX_NOISE_MULT;
         let min_noise = max_noise * MIN_NOISE_MULT;

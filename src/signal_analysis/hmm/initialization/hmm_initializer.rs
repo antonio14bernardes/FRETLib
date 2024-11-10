@@ -59,7 +59,7 @@ impl HMMInitializer {
             self.set_state_values_method(method)?;
         }
         if let Some(method) = init_setup.state_noises_method {
-            self.set_state_noises_method(method);
+            self.set_state_noises_method(method)?;
         }
         if let Some(method) = init_setup.start_matrix_method {
             self.set_start_matrix_method(method);
@@ -103,12 +103,12 @@ impl HMMInitializer {
         self.transition_matrix_method = method;
     }
 
-    pub fn get_intial_values(&self, sequence_values: &[f64], num_states: usize) -> Result<LearnerSpecificInitialValues, HMMInitializerError> {
+    pub fn get_intial_values(&self, sequence_set: &Vec<Vec<f64>>, num_states: usize) -> Result<LearnerSpecificInitialValues, HMMInitializerError> {
         let model_dist = self.learner_setup.model_distribution();
         let model_matrix_dist = self.learner_setup.model_matrix_distribution();
 
         // Get state values.
-        let (state_values, state_noise_from_values) = self.state_values_method.get_state_values(num_states, sequence_values, model_dist)?;
+        let (state_values, state_noise_from_values) = self.state_values_method.get_state_values(num_states, sequence_set, model_dist)?;
         
         
         // If the state values also provides noise, use this instead of the one obtained form the StateNoiseInitMethod struct
@@ -134,7 +134,7 @@ impl HMMInitializer {
         // If the state_value method didnt get us a noise, we use the normal noise init method thing
         } else {
             let (state_noise_from_noises, state_noise_std_from_noises) =
-            self.state_noises_method.get_state_noises(num_states, sequence_values, model_dist)?;
+            self.state_noises_method.get_state_noises(num_states, sequence_set, model_dist)?;
 
             state_noise = state_noise_from_noises;
 
@@ -387,18 +387,26 @@ impl StateValueInitMethod {
             Self::Sparse => {self}
         }
     }
-    pub fn get_state_values(&self, num_states: usize, sequence_values: &[f64], dist: bool) -> Result<(Vec<f64>, Option<Vec<f64>>), HMMInitializerError>{
-        check_validity(num_states, sequence_values)?;
+    pub fn get_state_values(&self, num_states: usize, sequence_set: &Vec<Vec<f64>>, dist: bool) -> Result<(Vec<f64>, Option<Vec<f64>>), HMMInitializerError>{
+        if sequence_set.is_empty() {return Err(HMMInitializerError::EmptyObservationSequence)}
+        for sequence_values in sequence_set {check_validity(num_states, sequence_values)?}
 
-        let min_value= sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-        let max_value= sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();        
+        let min_value= sequence_set.iter()
+        .map(|sequence| sequence.iter().min_by(|a, b| a.total_cmp(b)).unwrap())
+        .min_by(|a, b| a.total_cmp(b)).unwrap();
 
+        let max_value = sequence_set.iter()
+        .map(|sequence| sequence.iter().max_by(|a, b| a.total_cmp(b)).unwrap())
+        .max_by(|a, b| a.total_cmp(b)).unwrap();      
+
+        // Flatten the set of sequences to one single sequence
+        let total_sequence_values = sequence_set.concat();
 
         match self {
             StateValueInitMethod::KMeansClustering { max_iters, tolerance, num_tries, eval_method } => {
                 let mut best_score = f64::NEG_INFINITY;
                 let mut best_state_values = vec![0.0; num_states];
-                let mut best_assignments = vec![0_usize; sequence_values.len()];
+                let mut best_assignments = vec![0_usize; total_sequence_values.len()];
 
                 let max_iters = max_iters.unwrap_or(KMEANS_MAX_ITERS_DEFAULT);
                 let tolerance = tolerance.unwrap_or(KMEANS_TOLERANCE_DEFAULT);
@@ -407,16 +415,16 @@ impl StateValueInitMethod {
                 
 
                 for _ in 0..num_tries {
-                    let (state_values, assignments) = k_means_1_d(sequence_values, num_states, max_iters, tolerance);
+                    let (state_values, assignments) = k_means_1_d(&total_sequence_values, num_states, max_iters, tolerance);
                     let score: f64;
 
                     match eval_method {
                         ClusterEvaluationMethod::Silhouette => {
-                            score = silhouette_score_1_d(&state_values, &assignments, sequence_values);
+                            score = silhouette_score_1_d(&state_values, &assignments, &total_sequence_values);
                         }
 
                         ClusterEvaluationMethod::SimplifiedSilhouette => {
-                            score = simplified_silhouette_score_1_d(&state_values, &assignments, sequence_values);
+                            score = simplified_silhouette_score_1_d(&state_values, &assignments, &total_sequence_values);
                         }
                     }
                     // println!("Before. Num states: {}. Score: {}", num_states, score);
@@ -440,7 +448,7 @@ impl StateValueInitMethod {
                     for assignment in best_assignments.iter() {
                         count_per_cluster[*assignment] += 1;
                     }
-                    for (value, &assignment) in sequence_values.iter().zip(&best_assignments) {
+                    for (value, &assignment) in total_sequence_values.iter().zip(&best_assignments) {
                         cluster_stds[assignment] += (value - best_state_values[assignment]).powi(2);
                     }
                     for i in 0..cluster_stds.len() {
@@ -497,11 +505,18 @@ impl StateNoiseInitMethod {
         }
     }
 
-    pub fn get_state_noises(&self, num_states: usize, sequence_values: &[f64], dist: bool) -> Result<(Vec<f64>, Option<f64>), HMMInitializerError> {
-        check_validity(num_states, sequence_values)?;
+    pub fn get_state_noises(&self, num_states: usize, sequence_set: &Vec<Vec<f64>>, dist: bool) -> Result<(Vec<f64>, Option<f64>), HMMInitializerError> {
+        if sequence_set.is_empty() {return Err(HMMInitializerError::EmptyObservationSequence)}
+        for sequence_values in sequence_set {check_validity(num_states, sequence_values)?}
 
-        let min_value= sequence_values.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
-        let max_value= sequence_values.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+        let min_value= sequence_set.iter()
+        .map(|sequence| sequence.iter().min_by(|a, b| a.total_cmp(b)).unwrap())
+        .min_by(|a, b| a.total_cmp(b)).unwrap();
+
+        let max_value = sequence_set.iter()
+        .map(|sequence| sequence.iter().max_by(|a, b| a.total_cmp(b)).unwrap())
+        .max_by(|a, b| a.total_cmp(b)).unwrap(); 
+
         let noise: f64;
         let noise_std: Option<f64>;
         match self {
@@ -606,7 +621,7 @@ mod hmm_initializer_tests {
 
     use super::*;
 
-    fn create_test_sequence() -> (Vec<State>, StartMatrix, TransitionMatrix, Vec<f64>) {
+    fn create_test_sequence_set() -> (Vec<State>, StartMatrix, TransitionMatrix, Vec<Vec<f64>>) {
         // Define real states
         let real_state1 = State::new(0, 10.0, 1.0).unwrap();
         let real_state2 = State::new(1, 20.0, 2.0).unwrap();
@@ -623,16 +638,21 @@ mod hmm_initializer_tests {
             vec![0.2, 0.05, 0.75],
         ]);
 
-        // Generate the sequence
-        let (_sequence_ids, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 1000);
+        // Generate multiple sequences as the sequence set
+        let sequence_set = (0..5)
+            .map(|_| {
+                let (_, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 200);
+                sequence_values
+            })
+            .collect();
 
-        (real_states, real_start_matrix, real_transition_matrix, sequence_values)
+        (real_states, real_start_matrix, real_transition_matrix, sequence_set)
     }
     
     #[test]
     fn test_amalgam_idea_initialization() {
         // Generate test sequence
-        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence();
+        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_set) = create_test_sequence_set();
         let num_states = real_states.len();
 
         // Array of all AmalgamDependencies types
@@ -655,7 +675,7 @@ mod hmm_initializer_tests {
             let initializer = HMMInitializer::new(&learner_setup);
 
             // Obtain initial values
-            let initial_values = initializer.get_intial_values(&sequence_values, num_states).expect("Failed to get initial values");
+            let initial_values = initializer.get_intial_values(&sequence_set, num_states).expect("Failed to get initial values");
 
             // Check that output is of type LearnerSpecificInitialValues::AmalgamIdea
             if let LearnerSpecificInitialValues::AmalgamIdea { initial_distributions: Some((means, covs)) } = initial_values {
@@ -679,7 +699,7 @@ mod hmm_initializer_tests {
     #[test]
     fn test_amalgam_idea_baumwelch_initialization() {
         // Generate test sequence
-        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence();
+        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_set) = create_test_sequence_set();
         let num_states = real_states.len();
 
         // Array of all AmalgamDependencies types
@@ -702,7 +722,7 @@ mod hmm_initializer_tests {
             let initializer = HMMInitializer::new(&learner_setup);
 
             // Obtain initial values
-            let initial_values = initializer.get_intial_values(&sequence_values, num_states).expect("Failed to get initial values");
+            let initial_values = initializer.get_intial_values(&sequence_set, num_states).expect("Failed to get initial values");
 
             // Check that output is of type LearnerSpecificInitialValues::AmalgamIdea
             if let LearnerSpecificInitialValues::AmalgamIdea { initial_distributions: Some((means, covs)) } = initial_values {
@@ -726,7 +746,7 @@ mod hmm_initializer_tests {
     #[test]
     fn test_baumwelch_initialization() {
         // Generate test sequence
-        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_values) = create_test_sequence();
+        let (real_states, _real_start_matrix, _real_transition_matrix, sequence_set) = create_test_sequence_set();
         let num_states = real_states.len();
 
         // Define learner setup for BaumWelch
@@ -738,7 +758,7 @@ mod hmm_initializer_tests {
         let initializer = HMMInitializer::new(&learner_setup);
 
         // Obtain initial values
-        let initial_values = initializer.get_intial_values(&sequence_values, num_states).expect("Failed to get initial values");
+        let initial_values = initializer.get_intial_values(&sequence_set, num_states).expect("Failed to get initial values");
 
         // Check that output is of type LearnerSpecificInitialValues::BaumWelch
         if let LearnerSpecificInitialValues::BaumWelch { states, start_matrix, transition_matrix } = initial_values {

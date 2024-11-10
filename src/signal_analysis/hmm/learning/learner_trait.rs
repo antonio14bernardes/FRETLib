@@ -8,7 +8,7 @@ pub trait HMMLearnerTrait: Debug{
     fn initialize_learner(
         &mut self,
         num_states: usize, 
-        sequence_values: &[f64],
+        sequence_values: &Vec<Vec<f64>>,
         specific_initial_values: LearnerSpecificInitialValues) -> Result<(), HMMLearnerError>;
 
     fn learn(&mut self) -> Result<(Vec<State>, StartMatrix, TransitionMatrix), HMMLearnerError>;
