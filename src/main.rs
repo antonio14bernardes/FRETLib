@@ -164,7 +164,7 @@ fn main() {
 
     hmm.set_state_number_finder_strategy(NumStatesFindStratWrapper::CurrentSetup).unwrap();
 
-    let input = HMMInput::NumStatesFinder { sequence_set };
+    let input = HMMInput::NumStatesFinder { sequence_set: values_set };
 
     hmm.run(input).unwrap();
 

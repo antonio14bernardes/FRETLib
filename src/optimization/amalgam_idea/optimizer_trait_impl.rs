@@ -4,6 +4,7 @@ use rand::thread_rng;
 
 use crate::optimization::optimizer::{FitnessFunction, OptimizationFitness};
 
+use super::verbosity::{YapLevel, Yapper};
 use super::{AmalgamIdea, AmalgamIdeaError};
 
 use super::super::optimizer::Optimizer;
@@ -164,19 +165,37 @@ Fitness: OptimizationFitness
             max_iter_reach || c_mult_min_reach
         };
 
+        // Setup yapper
+        let mut yapper = Yapper::new(
+            self.max_iterations,
+            self.problem_size,
+            self.iter_memory,
+            self.manual_pop_size,
+            self.parameters.as_ref().unwrap(),
+            self.verbosity_level.clone(),
+        );
+
+        yapper.startup_yap(); // Print startup message
+        let mut i = 1_usize;
+
         while !termination(self.max_iterations, &mut iters, c_mult_min, self.c_mult) {
-            
+            let (best_sol, fit) = self.get_best_solution().unwrap();
+            yapper.iteration_yap(&i, fit, best_sol);
+            i += 1;
+
             self.step()?;
 
             let new_fit = self.best_solution.as_ref().unwrap().1.clone();
 
             self.best_fitnesses.push(new_fit.get_fitness());
 
-            let (best_sol, fit) = self.get_best_solution().unwrap();
-            if iters % 20 == 0 {
-                println!("In iteration {}", iters);
-                println!("Best solution: {:?}. With fitness: {:?}", best_sol, fit);
-            }            
+            // let (best_sol, fit) = self.get_best_solution().unwrap();
+            // if iters % 20 == 0 {
+            //     println!("In iteration {}", iters);
+            //     println!("Best solution: {:?}. With fitness: {:?}", best_sol, fit);
+            // }        
+
+                
         }
 
         Ok(())
