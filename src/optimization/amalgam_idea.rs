@@ -8,6 +8,7 @@ pub use struct_definition::*;
 pub use optimizer_trait_impl::*;
 pub use amalgam_specific::*;
 pub use amalgam_parameters::*;
+pub use verbosity::YapLevel;
 
 // Tests
 mod tests;

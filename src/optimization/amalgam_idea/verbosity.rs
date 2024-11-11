@@ -52,13 +52,13 @@ impl Yapper {
         match self.yap_level {
             YapLevel::None => return, // Skip printing if yap level is None
             YapLevel::ALittle => {
-                println!("\n\n\nStarting a run of AmalgamIdea");
+                println!("\n\nStarting a run of AmalgamIdea");
                 println!("=============================================");
             }
             YapLevel::ALot => {
                 let population_size = self.manual_population_size.unwrap_or(self.amalgam_parameters.population_size);
 
-                println!("\n\n\nStarting a run of AmalgamIdea");
+                println!("\n\nStarting a run of AmalgamIdea");
                 println!("=============================================");
                 println!("With parameters:\n");
                 println!(
@@ -79,7 +79,7 @@ impl Yapper {
                 println!("Mean Shift Fraction (alpha_shift): {:.3}", self.amalgam_parameters.alpha_shift);
                 println!("Mean Shift Factor (gamma_shift)  : {:.3}", self.amalgam_parameters.gamma_shift);
                 println!("Stagnant Iterations Threshold    : {}", self.amalgam_parameters.stagnant_iterations_threshold);
-                println!("=============================================\n\n\n");
+                println!("=============================================\n");
             }
         }
     }

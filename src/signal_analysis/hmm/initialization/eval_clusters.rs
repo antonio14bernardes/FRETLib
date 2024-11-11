@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::fmt;
 
 
 use super::kmeans::k_means_1_d;
@@ -15,6 +16,16 @@ pub enum ClusterEvaluationMethod {
 impl ClusterEvaluationMethod {
     pub fn default() -> Self {
         Self::Silhouette
+    }
+}
+
+// Implement Display for ClusterEvaluationMethod
+impl fmt::Display for ClusterEvaluationMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ClusterEvaluationMethod::Silhouette => write!(f, "Silhouette"),
+            ClusterEvaluationMethod::SimplifiedSilhouette => write!(f, "Simplified Silhouette"),
+        }
     }
 }
 
