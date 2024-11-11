@@ -1,5 +1,5 @@
 pub fn bayes_information_criterion_binary_search<F>
-(test_function: F,  min_n: usize, max_n: usize) -> Result<(usize, f64), BayesInformationCriterionError>
+(test_function: F,  min_n: usize, max_n: usize, verbose: bool) -> Result<(usize, f64), BayesInformationCriterionError>
 where
     F: Fn(usize) -> (f64, usize, usize), // log-likelihood, total num parameters (not necessarily the value we give the function), num samples
 {
@@ -12,8 +12,11 @@ where
         let mid = (left + right) / 2;
 
         // Evaluate BIC at mid and mid+1
+        if verbose {println!("\n\nTrying for k = {}", mid)};
         let (ll_mid, num_parameters_mid, samples_mid) = test_function(mid);
+        if verbose {println!("\n\nTrying for k = {}", mid+1)};
         let (ll_next, num_parameters_next, samples_next) = test_function(mid + 1);
+
         let bic_mid = compute_bic(ll_mid, num_parameters_mid, samples_mid);
         let bic_next = compute_bic(ll_next, num_parameters_next, samples_next);
 

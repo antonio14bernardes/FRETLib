@@ -1,5 +1,6 @@
 use nalgebra::{DMatrix, DVector};
-use std::fmt::Debug;
+use std::fmt::{Display, Debug};
+use std::fmt;
 
 use crate::{optimization::amalgam_idea::AmalgamIdeaError, signal_analysis::hmm::{amalgam_integration::amalgam_modes::{AmalgamDependencies, AmalgamFitness, AMALGAM_DEPENDENCY_DEFAULT, AMALGAM_FITNESS_DEFAULT, AMALGAM_ITER_MEMORY_DEFAULT, AMALGAM_MAX_ITERS_DEFAULT}, baum_welch::BaumWelchError, optimization_tracker::TerminationCriterium, StartMatrix, State, TransitionMatrix}};
 
@@ -22,7 +23,8 @@ pub trait HMMLearnerTrait: Debug{
     fn full_reset(&mut self);// reset everything
 
     fn clone_box(&self) -> Box<dyn HMMLearnerTrait>;
-
+    
+    fn set_verbosity(&mut self, verbose: bool);
 }
 
 impl Clone for Box<dyn HMMLearnerTrait> {
@@ -40,6 +42,15 @@ pub enum LearnerType {
 impl LearnerType {
     pub fn default() -> Self {
         LearnerType::BaumWelch
+    }
+}
+
+impl Display for LearnerType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LearnerType::AmalgamIdea => write!(f, "AmalgamIdea Optimization Algorithm"),
+            LearnerType::BaumWelch => write!(f, "Baum-Welch Method"),
+        }
     }
 }
 
