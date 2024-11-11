@@ -1,3 +1,4 @@
+use amalgam_integration::amalgam_modes::{AMALGAM_MAX_ITERS_DEFAULT, AMALGAM_FITNESS_DEFAULT, AMALGAM_DEPENDENCY_DEFAULT, AMALGAM_ITER_MEMORY_DEFAULT};
 use learning::learner_trait::LearnerType;
 use std::fmt::Debug;
 use super::{learner_trait::{HMMLearnerError, HMMLearnerTrait, LearnerSpecificInitialValues, LearnerSpecificSetup}, learner_wrappers::{AmalgamHMMWrapper, BaumWelchWrapper}};
@@ -9,6 +10,8 @@ pub const LEARNER_TYPE_DEFAULT: LearnerType = LearnerType::BaumWelch;
 pub struct HMMLearner {
     learner: Box<dyn HMMLearnerTrait>,
     learner_type: LearnerType,
+    learner_setup: LearnerSpecificSetup,
+    verbose: bool,
 }
 
 impl HMMLearner {
@@ -16,6 +19,8 @@ impl HMMLearner {
         Self {
             learner:Box::new(BaumWelchWrapper::new()),
             learner_type: LearnerType::BaumWelch,
+            learner_setup: LearnerSpecificSetup::default(&LearnerType::BaumWelch),
+            verbose: true,
         }
     }
     pub fn new(learner_type: LearnerType) -> Self {
@@ -30,7 +35,65 @@ impl HMMLearner {
                 learner = Box::new(BaumWelchWrapper::new());
             }
         }
-        Self{learner, learner_type}}
+
+        let learner_setup = LearnerSpecificSetup::default(&learner_type);
+        Self{learner, learner_type, learner_setup, verbose: true}
+    }
+
+    fn start_learning_yap(&self) {
+        // Print the learning method
+        println!(
+            "\n\nStarting HMM Learning using {}\n",
+            self.learner_type
+        );
+        println!("---------------------------------------------\n");
+
+        // Print the setup parameters
+        println!("With setup parameters:");
+        match &self.learner_setup {
+            LearnerSpecificSetup::AmalgamIdea {
+                iter_memory,
+                dependence_type,
+                fitness_type,
+                max_iterations,
+            } => {
+                println!(
+                    "  Iteration Memory       : {}",
+                    iter_memory.unwrap_or(AMALGAM_ITER_MEMORY_DEFAULT)
+                );
+                println!(
+                    "  Dependence Type        : {}",
+                    dependence_type
+                        .as_ref()
+                        .unwrap_or(&AMALGAM_DEPENDENCY_DEFAULT)
+                );
+                println!(
+                    "  Fitness Type           : {}",
+                    fitness_type
+                        .as_ref()
+                        .unwrap_or(&AMALGAM_FITNESS_DEFAULT)
+                );
+                println!(
+                    "  Max Iterations         : {}",
+                    max_iterations.unwrap_or(AMALGAM_MAX_ITERS_DEFAULT)
+                );
+            }
+            LearnerSpecificSetup::BaumWelch {
+                termination_criterion,
+            } => {
+                let termination = termination_criterion
+                    .as_ref()
+                    .map(|tc| tc.to_string())
+                    .unwrap_or_else(|| "Default".to_string());
+                println!("  Termination Criterion  : {}", termination);
+            }
+        }
+        println!("---------------------------------------------\n");
+    }
+
+    fn finish_learning_yap(&self) {
+        println!("\n\nFinished HMM Learning");
+    }
 }
 
 impl HMMLearnerTrait for HMMLearner {
@@ -41,7 +104,9 @@ impl HMMLearnerTrait for HMMLearner {
             _ => {return Err(HMMLearnerError::IncompatibleInputs)} // Not ok at all
         }
 
-        self.learner.setup_learner(specific_setup)?;
+        self.learner.setup_learner(specific_setup.clone())?;
+        self.learner.set_verbosity(self.verbose);
+        self.learner_setup = LearnerSpecificSetup::handle_nones(specific_setup);
 
         Ok(())
     }
@@ -75,8 +140,17 @@ impl HMMLearnerTrait for HMMLearner {
 
 
     fn learn(&mut self) -> Result<(Vec<State>, StartMatrix, TransitionMatrix), HMMLearnerError> {
-        
-        self.learner.learn()
+        if self.verbose {
+            self.start_learning_yap();
+        }
+
+        let res = self.learner.learn();
+
+        if self.verbose {
+            self.finish_learning_yap();
+        }
+
+        res
     }
 
     fn get_setup_data(&self) -> Option<&LearnerSpecificSetup> {
@@ -97,6 +171,11 @@ impl HMMLearnerTrait for HMMLearner {
 
     fn clone_box(&self) -> Box<dyn HMMLearnerTrait> {
         Box::new(self.clone())
+    }
+
+    fn set_verbosity(&mut self, verbose: bool) {
+        self.verbose = verbose;
+        self.learner.set_verbosity(verbose);
     }
 }
 

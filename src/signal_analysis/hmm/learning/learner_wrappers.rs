@@ -5,7 +5,7 @@ use crate::signal_analysis::hmm::baum_welch::{run_baum_welch_on_sequence_set, Ba
 use crate::signal_analysis::hmm::optimization_tracker::{StateCollapseHandle, TerminationCriterium};
 use crate::signal_analysis::hmm::{StartMatrix, State, TransitionMatrix};
 use crate::optimization::optimizer::{OptimizationFitness, Optimizer};
-
+use crate::optimization::amalgam_idea::YapLevel;
 use super::learner_trait::{HMMLearnerError, HMMLearnerTrait, LearnerSpecificInitialValues, LearnerSpecificSetup, LearnerType};
 
 #[derive(Debug, Clone)]
@@ -140,6 +140,14 @@ impl HMMLearnerTrait for AmalgamHMMWrapper {
 
     fn clone_box(&self) -> Box<dyn HMMLearnerTrait> {
         Box::new(self.clone())
+    }
+
+    fn set_verbosity(&mut self, verbose: bool) {
+        if let Some(amalgam) = self.amalgam.as_mut() {
+            let verbosity_level = if verbose {YapLevel::ALot} else {YapLevel::ALittle};
+
+            amalgam.set_verbosity(verbosity_level);
+        }
     }
 }
 
@@ -276,6 +284,11 @@ impl HMMLearnerTrait for BaumWelchWrapper {
 
     fn clone_box(&self) -> Box<dyn HMMLearnerTrait> {
         Box::new(self.clone())
+    }
+
+    fn set_verbosity(&mut self, verbose: bool) {
+        let _ = verbose; // Just to get rid of the warning
+        // Nothing to see here -_-
     }
 
 }

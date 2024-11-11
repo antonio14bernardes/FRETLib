@@ -276,7 +276,6 @@ impl PointTraces {
         let threshold = photobleaching_filter_values.noise_threshold_multiple;
 
         if self.donor.is_some() {
-            println!("Inside donor");
             let donor_type = self.donor.as_ref().unwrap().clone();
 
             let donor = self.get_trace(&donor_type).unwrap();
@@ -287,7 +286,6 @@ impl PointTraces {
         }
 
         if self.acceptor.is_some() {
-            println!("Inside acceptor");
             let acceptor_type = self.acceptor.as_ref().unwrap().clone();
 
             let acceptor = self.get_trace(&acceptor_type).unwrap();
@@ -296,8 +294,6 @@ impl PointTraces {
 
             self.acceptor_photobleaching = Some(all_events);
         }
-
-        println!("Donor inside: {:?}", self.donor);
 
         if self.donor.is_none() {
             return Err(PointTracesError::NoDonorFound);
