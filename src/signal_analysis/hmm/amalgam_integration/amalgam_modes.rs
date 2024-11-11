@@ -1,6 +1,6 @@
 use super::amalgam_fitness_functions::*;
 use crate::{optimization::{amalgam_idea::AmalgamIdea, constraints::OptimizationConstraint}, signal_analysis::hmm::learning::learner_trait::HMMLearnerError};
-
+use std::fmt;
 
 // Max noise constraits are obtained by dividing the range of values by the number of states
 // and then multiplying by max noise multiplier. The min noise is obtained by multiplying the max noise by the min noise mult
@@ -23,6 +23,25 @@ pub enum AmalgamDependencies {
 pub enum AmalgamFitness {
     Direct, // Recommended
     BaumWelch
+}
+
+impl fmt::Display for AmalgamDependencies {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AmalgamDependencies::AllIndependent => write!(f, "All Independent"),
+            AmalgamDependencies::StateCompact => write!(f, "State Compact"),
+            AmalgamDependencies::ValuesDependent => write!(f, "Values Dependent"),
+        }
+    }
+}
+
+impl fmt::Display for AmalgamFitness {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AmalgamFitness::Direct => write!(f, "Direct"),
+            AmalgamFitness::BaumWelch => write!(f, "Baum-Welch"),
+        }
+    }
 }
 
 pub fn get_variable_subsets(num_states: usize, dependence_type: &AmalgamDependencies, fitness_type: &AmalgamFitness) -> Result<Vec<Vec<usize>>, HMMLearnerError> {

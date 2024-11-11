@@ -1,6 +1,6 @@
 use core::f64;
 
-use crate::signal_analysis::hmm::{hmm_instance::{HMMInstance, HMMInstanceError, VALUE_SEQUENCE_THRESHOLD}, StartMatrix, State, TransitionMatrix};
+use crate::signal_analysis::hmm::{hmm_instance::{HMMInstance, HMMInstanceError, VALUE_SEQUENCE_THRESHOLD}, IDTarget, StartMatrix, State, TransitionMatrix};
 
 #[derive(Debug)]
 pub struct HMMAnalyzer {
@@ -12,6 +12,8 @@ pub struct HMMAnalyzer {
 
     sequence_states: Option<Vec<Vec<usize>>>,
     state_occupancy: Option<Vec<f64>>,
+
+    verbose: bool,
 }
 
 impl HMMAnalyzer {
@@ -25,6 +27,8 @@ impl HMMAnalyzer {
 
             sequence_states: None,
             state_occupancy: None,
+
+            verbose: true,
         }
     }
 
@@ -90,12 +94,61 @@ impl HMMAnalyzer {
         Ok(())
     }
 
+    pub fn set_verbosity(&mut self, verbose: bool) {
+        self.verbose = verbose;
+    }
+
+    fn start_analysis_yap(&self) {
+        println!("\nStarting HMM Result Analysis");
+        println!("---------------------------------------------\n");
+    }
+
+    fn finish_analysis_yap(&self) {
+        let states = self.states.as_ref().unwrap();
+        let start_matrix = self.start_matrix.as_ref().unwrap();
+        let transition_matrix = self.transition_matrix.as_ref().unwrap();
+        let state_occupancy = self.state_occupancy.as_ref().unwrap();
+
+        println!("\nFinished HMM Result Analysis\n");
+        println!("Results:\n");
+
+        // Print States
+        println!("\nStates:");
+        println!("{:<10} {:<15} {:<15}", "State ID", "Mean", "Standard Deviation");
+        for state in states {
+            println!(
+                "{:<10} {:<15.6} {:<15.6}",
+                state.get_id(),
+                state.get_value(),
+                state.get_noise_std()
+            );
+        }
+
+        // Print Start Matrix
+        println!("\n{}", start_matrix);
+
+        // Print Transition Matrix
+        println!("\n{}", transition_matrix);
+
+        // Print State Occupancy
+        println!("\nState Occupancy (Proportion of Time Spent in Each State):");
+        for (state_id, occupancy) in state_occupancy.iter().enumerate() {
+            println!("  State {:<3}: Occupancy = {:.6}", state_id, occupancy);
+        }
+
+        println!("---------------------------------------------\n");
+
+    }
+
     pub fn run(&mut self) -> Result<(), HMMAnalyzerError> {
         // Check if everything is set
         if self.sequence_set.is_none(){return Err(HMMAnalyzerError::SequenceValuesNotDefined)}
         if self.states.is_none() {return Err(HMMAnalyzerError::StatesNotDefined)}
         if self.start_matrix.is_none() {return Err(HMMAnalyzerError::StartMatrixNotDefined)}
         if self.transition_matrix.is_none() {return Err(HMMAnalyzerError::TransitionMatrixNotDefined)}
+
+        // Print something nice to start the process
+        if self.verbose {self.start_analysis_yap();}
 
         // if everything is set, get the references to the hmm parameters
         let sequence_set_ref = self.sequence_set.as_ref().unwrap();
@@ -113,6 +166,10 @@ impl HMMAnalyzer {
         // Get state occupancy
         let state_occupancy = Self::compute_state_occupancy(&viterbi_predictions);
         self.state_occupancy = Some(state_occupancy);
+
+
+        // Print something nice to end the process
+        if self.verbose {self.finish_analysis_yap();}
 
         Ok(())
     }
@@ -143,27 +200,59 @@ impl HMMAnalyzer {
         Ok(predictions)
     }
 
-    pub fn compute_state_occupancy(state_sequences: &Vec<Vec<usize>>) -> Vec<f64>{
+    pub fn compute_state_occupancy(state_sequences: &Vec<Vec<usize>>) -> Vec<f64> {
         // Return empty vector if state sequence is empty
-        if state_sequences.is_empty() {return Vec::new()}
+        if state_sequences.is_empty() { return Vec::new(); }
         if state_sequences.iter().all(|sequence| sequence.is_empty()) { return Vec::new(); }
-
-        let num_states = 
-        state_sequences.iter().map(|sequence| sequence.iter().max().copied().unwrap()).max().unwrap() + 1; // Will never be none bc sequence cant be empty here
-        
-        let total_sequence_len: usize = state_sequences.iter().map(|sequence| sequence.len()).sum();   
+    
+        // Determine the total number of states
+        let num_states = state_sequences
+            .iter()
+            .flat_map(|sequence| sequence.iter().cloned())
+            .max()
+            .unwrap_or(0) + 1;
+    
+        // Total length of all sequences
+        let total_sequence_len: usize = state_sequences.iter().map(|sequence| sequence.len()).sum();
+    
+        // Compute weights for each sequence
+        let sequence_weights: Vec<f64> = state_sequences
+            .iter()
+            .map(|sequence| {
+                sequence.len() as f64 / (total_sequence_len as f64)
+            })
+            .collect();
+    
+        let total_weight: f64 = sequence_weights.iter().sum();
+    
+        // Initialize state occupancy
         let mut state_occupancy = vec![0.0; num_states];
-        
-        for sequence in state_sequences {
-            let current_sequence_len = sequence.len();
-            let coefficient = current_sequence_len as f64 * total_sequence_len as f64;
-            let mut state_dwell_count = vec![0_usize; num_states];
-            sequence.iter().for_each(|state_id| state_dwell_count[*state_id] += 1);
-
-            state_occupancy.iter_mut().zip(&state_dwell_count)
-            .for_each(|(occ, count)| *occ = *occ + coefficient * *count as f64);
+    
+        // For each sequence
+        for (sequence, &weight) in state_sequences.iter().zip(sequence_weights.iter()) {
+            let mut state_counts = vec![0_usize; num_states];
+            for &state_id in sequence {
+                state_counts[state_id] += 1;
+            }
+    
+            // Compute per-sequence occupancy (state_counts / sequence length)
+            let sequence_length = sequence.len() as f64;
+            let per_sequence_occupancy: Vec<f64> = state_counts
+                .iter()
+                .map(|&count| count as f64 / sequence_length)
+                .collect();
+    
+            // Add weighted occupancy to total
+            for (occ, &per_seq_occ) in state_occupancy.iter_mut().zip(per_sequence_occupancy.iter()) {
+                *occ += weight * per_seq_occ;
+            }
         }
-
+    
+        // Normalize by total weight
+        for occ in state_occupancy.iter_mut() {
+            *occ /= total_weight;
+        }
+    
         state_occupancy
     }
 

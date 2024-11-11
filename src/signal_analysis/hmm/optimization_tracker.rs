@@ -1,3 +1,5 @@
+use std::fmt;
+
 pub struct OptimizationTracker {
     evals: Vec<f64>,
     iters: u32,
@@ -120,6 +122,28 @@ pub enum TerminationCriterium {
 impl TerminationCriterium {
     pub fn default() -> Self {
         TerminationCriterium::PlateauConvergence { epsilon: 1e-5, plateau_len: 20, max_iterations: Some(500) }
+    }
+}
+
+impl fmt::Display for TerminationCriterium {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TerminationCriterium::MaxIterations { max_iterations } => {
+                write!(f, "Max Iterations ({})", max_iterations)
+            }
+            TerminationCriterium::OneStepConvergence { epsilon, max_iterations } => {
+                write!(f, "One Step Convergence (epsilon: {:.6}, max_iterations: {:?})", epsilon, max_iterations)
+            }
+            TerminationCriterium::OneStepConvergenceAbsolute { epsilon, max_iterations } => {
+                write!(f, "One Step Convergence Absolute (epsilon: {:.6}, max_iterations: {:?})", epsilon, max_iterations)
+            }
+            TerminationCriterium::PlateauConvergence { epsilon, plateau_len, max_iterations } => {
+                write!(f, "Plateau Convergence (epsilon: {:.6}, plateau length: {}, max_iterations: {:?})", epsilon, plateau_len, max_iterations)
+            }
+            TerminationCriterium::PlateauConvergenceAbsolute { epsilon, plateau_len, max_iterations } => {
+                write!(f, "Plateau Convergence Absolute (epsilon: {:.6}, plateau length: {}, max_iterations: {:?})", epsilon, plateau_len, max_iterations)
+            }
+        }
     }
 }
 

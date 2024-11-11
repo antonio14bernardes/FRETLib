@@ -1,4 +1,5 @@
 use rand::Rng;
+use std::fmt;
 
 use super::state::*;
 use super::hmm_tools::*;
@@ -206,6 +207,30 @@ impl<T: IDTarget> IndexMut<(T, T)> for TransitionMatrix {
     }
 }
 
+
+impl fmt::Display for TransitionMatrix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let num_states = self.matrix.len();
+
+        // Print header
+        write!(f, "{:<10}", "From/To")?;
+        for to_state_id in 0..num_states {
+            write!(f, "{:<12}", format!("State {}", to_state_id))?;
+        }
+        writeln!(f)?;
+        
+        // Rows
+        for (from_state_id, row) in self.matrix.iter().enumerate() {
+            write!(f, "{:<10}", format!("State {}", from_state_id))?;
+            for &prob in row {
+                write!(f, "{:<12.6}", prob)?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StartMatrix {
     pub matrix: Vec<f64>,
@@ -335,6 +360,16 @@ impl<T: IDTarget> Index<T> for StartMatrix {
 impl<T: IDTarget> IndexMut<T> for StartMatrix {
     fn index_mut(&mut self, index: T) -> &mut Self::Output {
         &mut self.matrix[index.get_id()]
+    }
+}
+
+impl fmt::Display for StartMatrix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Start Matrix (Initial State Probabilities):")?;
+        for (state_id, &prob) in self.matrix.iter().enumerate() {
+            writeln!(f, "  State {:<3}: Probability = {:.6}", state_id, prob)?;
+        }
+        Ok(())
     }
 }
 
