@@ -1,5 +1,6 @@
 use super::analysis::hmm_analyzer::{HMMAnalyzer, HMMAnalyzerError};
 use super::hmm_initializer::InitializationMethods;
+use super::initialization::eval_clusters::ClusterEvaluationMethod;
 use super::learning::learner_trait::HMMLearnerTrait;
 use super::{HMMInitializer, HMMLearner, HMMNumStatesFinder, StartMatrix, State, TransitionMatrix};
 use super::{HMMNumStatesFinderError, HMMInitializerError, HMMLearnerError};
@@ -168,8 +169,22 @@ impl HMM {
         Ok(())
     }
 
-    pub fn set_state_number_finder_strategy(&mut self, strategy: NumStatesFindStrat) -> Result<(), HMMError> {
+    pub fn set_state_number_finder_strategy(&mut self, strategy_wrapper: NumStatesFindStratWrapper) -> Result<(), HMMError> {
         if self.num_states_finder.is_none() {return Err(HMMError::NumStatesFinderNotDefined)}
+
+        let strategy: NumStatesFindStrat =
+        match strategy_wrapper {
+            NumStatesFindStratWrapper::KMeansClustering { num_tries, max_iters, tolerance, method } => {
+                NumStatesFindStrat::KMeansClustering { num_tries, max_iters, tolerance, method }
+            }
+            NumStatesFindStratWrapper::BaumWelch => NumStatesFindStrat::BaumWelch,
+            NumStatesFindStratWrapper::CurrentSetup => {
+                let learner = self.learner.clone().unwrap();
+                let initializer = self.initializer.clone().unwrap();
+
+                NumStatesFindStrat::CurrentSetup { initializer, learner }
+            }
+        };
 
         // If the number of states finder has been added, set it up
         let num_states_finder = self.num_states_finder.as_mut().unwrap();
@@ -241,6 +256,12 @@ pub enum HMMInput {
     Initializer{num_states: usize, sequence_set: Vec<Vec<f64>>},
     Learner{num_states: usize, sequence_set: Vec<Vec<f64>>, learner_init: LearnerSpecificInitialValues},
     Analyzer{sequence_set: Vec<Vec<f64>>, states: Vec<State>, start_matrix: StartMatrix, transition_matrix: TransitionMatrix},
+}
+
+pub enum NumStatesFindStratWrapper {
+    KMeansClustering {num_tries: Option<usize>, max_iters: Option<usize>, tolerance: Option<f64>, method: Option<ClusterEvaluationMethod>},
+    BaumWelch,
+    CurrentSetup, // remove this stuff here
 }
 
 #[derive(Debug)]

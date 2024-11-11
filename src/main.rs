@@ -6,7 +6,7 @@ use fret_lib::optimization::amalgam_idea::{self, AmalgamIdea};
 use fret_lib::optimization::constraints::OptimizationConstraint;
 use fret_lib::optimization::optimizer::{FitnessFunction, Optimizer};
 use fret_lib::signal_analysis::hmm::hmm_instance::{HMMInstance, HMMInstanceError};
-use fret_lib::signal_analysis::hmm::hmm_struct::{HMMInput, HMM};
+use fret_lib::signal_analysis::hmm::hmm_struct::{HMMInput, NumStatesFindStratWrapper, HMM};
 use fret_lib::signal_analysis::hmm::learning::hmm_learner::HMMLearner;
 use fret_lib::signal_analysis::hmm::learning::learner_trait::{HMMLearnerTrait, LearnerSpecificInitialValues, LearnerSpecificSetup, LearnerType};
 use fret_lib::signal_analysis::hmm::number_states_finder::hmm_num_states_finder::{HMMNumStatesFinder, NumStatesFindStrat};
@@ -45,7 +45,12 @@ fn main() {
     ];
     let real_transition_matrix = TransitionMatrix::new(real_transition_matrix_raw);
 
-    let (_sequence_ids, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 1000);
+    let mut sequence_set = Vec::new();
+
+    for _ in 0..3 {
+        let (_sequence_ids, sequence_values) = HMMInstance::gen_sequence(&real_states, &real_start_matrix, &real_transition_matrix, 1000);
+        sequence_set.push(sequence_values);
+    }
 
     
 
@@ -60,8 +65,10 @@ fn main() {
             iter_memory: None, dependence_type: None, fitness_type: None, max_iterations: None
         }).unwrap();
     hmm.add_initializer().unwrap();
+    hmm.add_number_of_states_finder().unwrap();
+    hmm.set_state_number_finder_strategy(NumStatesFindStratWrapper::CurrentSetup).unwrap();
 
-    let input = HMMInput::Initializer { num_states: real_states.len(), sequence_set: vec![sequence_values] };
+    let input = HMMInput::NumStatesFinder { sequence_set };
 
     hmm.run(input).unwrap();
 
