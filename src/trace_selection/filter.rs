@@ -4,9 +4,9 @@ pub struct ValuesToFilter {
     pub fret_lifetimes: Vec<[usize; 2]>,
     // donor_blinking_events: Vec<usize>,
     pub snr_signal: f64, // SNR of total intensity before donor bleaching
-    pub snr_backgroung: f64, // Mean of intensity before donor bleaching divided by s.d. of intensity after donor bleaching
+    pub snr_background: Option<f64>, // Mean of intensity before donor bleaching divided by s.d. of intensity after donor bleaching
     pub correlation_coef: f64, // Correlation between donor and acceptor
-    pub background_std_post_bleach: f64,
+    pub background_std_post_bleach: Option<f64>,
     pub intensity_min_man_mean_std: MinMaxMeanStd,
     pub first_fret: f64,
     pub max_fret: f64,
@@ -23,17 +23,17 @@ pub struct MinMaxMeanStd {
 
 #[derive(Debug, Clone)]
 pub enum FilterTest {
-    PhotobleachingSteps { threshold: usize, received: usize },
-    DonorLifetime { min_required: usize, received: usize },
-    FretLifetime { min_required: usize, largest_received: usize },
-    SNRBackground { min_required: f64, received: f64 },
-    CorrelationCoefficient { max_allowed: f64, received: f64 },
-    BackgroundNoise { max_allowed: f64, received: f64 },
+    PhotobleachingSteps { test: Comparison<usize>, received: usize },
+    DonorLifetime { test: Comparison<usize>, received: usize },
+    FretLifetime { test: Comparison<usize>, largest_received: usize },
+    SNRBackground { test: Comparison<f64>, received: f64 },
+    CorrelationCoefficient { test: Comparison<f64>, received: f64 },
+    BackgroundNoise { test: Comparison<f64>, received: f64 },
     MeanTotalIntensity { allowed_range: [f64; 2], received_range: [f64; 2] }, // ranges are [min, max]
-    SNRSignal { min_required: f64, received: f64 },
-    FRETFirstTimeStep { min_required: f64, received: f64 },
-    HighestFRET { max_allowed: f64, received: f64 },
-    AverageFRET { max_allowed: f64, received: f64 },
+    SNRSignal { test: Comparison<f64>, received: f64 },
+    FRETFirstTimeStep { test: Comparison<f64>, received: f64 },
+    HighestFRET { test: Comparison<f64>, received: f64 },
+    AverageFRET { test: Comparison<f64>, received: f64 },
 }
 
 
@@ -71,6 +71,23 @@ impl FilterSetup {
             average_fret: None,
         }
     }
+
+    pub fn empty() -> Self {
+        Self {
+            photobleaching_steps: None,
+            donor_lifetime: None,
+            fret_lifetimes: None,
+            snr_background: None,
+            correlation_coefficient: None,
+            background_noise: None,
+            mean_total_intensity: None,
+
+            snr_signal: None,
+            fret_first_time_step: None,
+            highest_fret: None,
+            average_fret: None,
+        }
+    }
     
     pub fn check_valid(&self, values_to_filter: &ValuesToFilter) -> (bool, Vec<FilterTest>) {
         let mut failed_tests = Vec::new();
@@ -79,7 +96,7 @@ impl FilterSetup {
         if let Some(threshold) = self.photobleaching_steps.as_ref() {
             let received = values_to_filter.donor_photobleaching.len();
             if !run_test(Some(threshold), received) {
-                failed_tests.push(FilterTest::PhotobleachingSteps { threshold: 1, received });
+                failed_tests.push(FilterTest::PhotobleachingSteps { test: threshold.clone(), received });
             }
         }
 
@@ -89,7 +106,7 @@ impl FilterSetup {
             let last_photobleach = photobleaching_events[photobleaching_events.len() - 1];
             if let Some(min_required) = self.donor_lifetime.as_ref() {
                 if !run_test(Some(min_required), last_photobleach) {
-                    failed_tests.push(FilterTest::DonorLifetime { min_required: 50, received: last_photobleach });
+                    failed_tests.push(FilterTest::DonorLifetime { test: min_required.clone(), received: last_photobleach });
                 }
             }
         }
@@ -97,21 +114,26 @@ impl FilterSetup {
         // FRET lifetime test
         let lifetimes = &values_to_filter.fret_lifetimes;
         if lifetimes.is_empty() && self.fret_lifetimes.is_some() {
-            failed_tests.push(FilterTest::FretLifetime { min_required: 15, largest_received: 0 });
+            failed_tests.push(FilterTest::FretLifetime { test: self.fret_lifetimes.as_ref().unwrap().clone(), largest_received: 0 });
         } else {
             let largest_lifetime = lifetimes.iter().map(|lifetime| lifetime[1]).max().unwrap_or(0);
             if let Some(min_required) = self.fret_lifetimes.as_ref() {
                 if !run_test(Some(min_required), largest_lifetime) {
-                    failed_tests.push(FilterTest::FretLifetime { min_required: 15, largest_received: largest_lifetime });
+                    failed_tests.push(FilterTest::FretLifetime { test: min_required.clone(), largest_received: largest_lifetime });
                 }
             }
         }
 
         // SNR background test
         if let Some(min_required) = self.snr_background.as_ref() {
-            let received = values_to_filter.snr_backgroung;
-            if !run_test(Some(min_required), received) {
-                failed_tests.push(FilterTest::SNRBackground { min_required: 8.0, received });
+            if let Some(received) = values_to_filter.snr_background {
+                // Only run the test if both min_required and received are Some
+                if !run_test(Some(min_required), received) {
+                    failed_tests.push(FilterTest::SNRBackground {
+                        test: min_required.clone(),
+                        received,
+                    });
+                }
             }
         }
 
@@ -119,15 +141,19 @@ impl FilterSetup {
         if let Some(max_allowed) = self.correlation_coefficient.as_ref() {
             let received = values_to_filter.correlation_coef;
             if !run_test(Some(max_allowed), received) {
-                failed_tests.push(FilterTest::CorrelationCoefficient { max_allowed: 0.5, received });
+                failed_tests.push(FilterTest::CorrelationCoefficient { test: max_allowed.clone(), received });
             }
         }
 
         // Background noise test
         if let Some(max_allowed) = self.background_noise.as_ref() {
-            let received = values_to_filter.background_std_post_bleach;
-            if !run_test(Some(max_allowed), received) {
-                failed_tests.push(FilterTest::BackgroundNoise { max_allowed: 70.0, received });
+            if let Some(received) = values_to_filter.background_std_post_bleach {
+                if !run_test(Some(max_allowed), received) {
+                    failed_tests.push(FilterTest::BackgroundNoise { 
+                        test: max_allowed.clone(), 
+                        received 
+                    });
+                }
             }
         }
 
@@ -157,7 +183,7 @@ impl FilterSetup {
         if let Some(min_required) = self.snr_signal.as_ref() {
             let received = values_to_filter.snr_signal;
             if !run_test(Some(min_required), received) {
-                failed_tests.push(FilterTest::SNRSignal { min_required: 10.0, received });
+                failed_tests.push(FilterTest::SNRSignal { test: min_required.clone(), received });
             }
         }
 
@@ -165,7 +191,7 @@ impl FilterSetup {
         if let Some(min_required) = self.fret_first_time_step.as_ref() {
             let received = values_to_filter.first_fret;
             if !run_test(Some(min_required), received) {
-                failed_tests.push(FilterTest::FRETFirstTimeStep { min_required: 0.2, received });
+                failed_tests.push(FilterTest::FRETFirstTimeStep { test: min_required.clone(), received });
             }
         }
 
@@ -173,7 +199,7 @@ impl FilterSetup {
         if let Some(max_allowed) = self.highest_fret.as_ref() {
             let received = values_to_filter.max_fret;
             if !run_test(Some(max_allowed), received) {
-                failed_tests.push(FilterTest::HighestFRET { max_allowed: 0.9, received });
+                failed_tests.push(FilterTest::HighestFRET { test: max_allowed.clone(), received });
             }
         }
 
@@ -181,7 +207,7 @@ impl FilterSetup {
         if let Some(max_allowed) = self.average_fret.as_ref() {
             let received = values_to_filter.average_fret;
             if !run_test(Some(max_allowed), received) {
-                failed_tests.push(FilterTest::AverageFRET { max_allowed: 0.7, received });
+                failed_tests.push(FilterTest::AverageFRET { test: max_allowed.clone(), received });
             }
         }
 

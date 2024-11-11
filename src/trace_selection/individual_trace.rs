@@ -1,7 +1,8 @@
 use std::hash::{Hash, Hasher};
 use super::tools::*;
+use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct IndividualTrace {
     values: Vec<f64>,
     trace_type: TraceType,
@@ -229,6 +230,14 @@ pub enum IndividualTraceError {
     NotEnoughValues,
 }
 
+impl fmt::Debug for IndividualTrace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IndividualTrace")
+            .field("trace_type", &self.trace_type)
+            .field("length", &self.values.len())
+            .finish()
+    }
+}
 
 fn check_trace_validity(trace: &[f64]) -> Result<(), IndividualTraceError> {
     if trace.len() == 0 {return Err(IndividualTraceError::EmptyTraceVector)}

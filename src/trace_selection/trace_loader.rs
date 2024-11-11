@@ -1,8 +1,10 @@
 use super::individual_trace::*;
 use super::point_traces::*;
+use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
+use std::str::FromStr;
 
 // Function to map column header to TraceType enum
 fn parse_trace_type(header: &str) -> Result<TraceType, TraceLoaderError> {
@@ -29,10 +31,13 @@ fn parse_trace_type(header: &str) -> Result<TraceType, TraceLoaderError> {
 // Function to parse the file and return a vector of IndividualTrace
 pub fn parse_file(file_path: &str) -> Result<PointTraces, TraceLoaderError> {
     let path = Path::new(file_path);
-    let file = File::open(&path).map_err(|error| TraceLoaderError::IOError { error })?;
+    let file = File::open(&path).map_err(|_| TraceLoaderError::FailedToLoadFiles { files: vec![file_path.to_string()] })?;
     let reader = io::BufReader::new(file);
 
     let lines = reader.lines().enumerate();
+
+    // Store the file path
+    let file_path_string = file_path.to_string();
 
     // Read the metadata lines
     let mut file_date = String::new();
@@ -44,7 +49,7 @@ pub fn parse_file(file_path: &str) -> Result<PointTraces, TraceLoaderError> {
     let mut headers: Vec<TraceType> = Vec::new();
 
     for (index, line) in lines {
-        let line = line.map_err(|error| TraceLoaderError::IOError { error })?;
+        let line = line.map_err(|_| TraceLoaderError::FailedToAnalyzeFile)?;
         let tokens: Vec<&str> = line.trim().split_whitespace().collect();
         if index == 0 {
             continue;
@@ -87,7 +92,7 @@ pub fn parse_file(file_path: &str) -> Result<PointTraces, TraceLoaderError> {
     }
 
     // Get metadata into a struct
-    let metadata = PointFileMetadata::new(file_date, movie_filename, fret_pair);
+    let metadata = PointFileMetadata::new(file_path_string, file_date, movie_filename, fret_pair);
 
     // Create IndividualTrace objects
     let mut point_traces = PointTraces::new_empty();
@@ -103,10 +108,42 @@ pub fn parse_file(file_path: &str) -> Result<PointTraces, TraceLoaderError> {
     Ok(point_traces)
 }
 
-#[derive(Debug)]
+pub fn load_traces_from_directory(dir: &str) -> Result<Vec<PointTraces>, TraceLoaderError> {
+    let mut successful_traces = Vec::new();
+    let mut failed_files = Vec::new();
+
+    // Read the directory entries
+    let entries = fs::read_dir(dir).map_err(|_| TraceLoaderError::InvalidDirectoryName)?;
+
+    for entry in entries {
+        let entry = entry.map_err(|_| TraceLoaderError::InvalidFileName)?;
+        let path = entry.path();
+
+        // Only process files (not directories)
+        if path.is_file() {
+            let file_path = path.to_str().unwrap_or_default().to_string();
+
+            match parse_file(&file_path) {
+                Ok(traces) => successful_traces.push(traces),
+                Err(_) => failed_files.push(file_path),
+            }
+        }
+    }
+
+    if !failed_files.is_empty() {
+        Err(TraceLoaderError::FailedToLoadFiles { files: failed_files })
+    } else {
+        Ok(successful_traces)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum TraceLoaderError {
-    IOError {error: io::Error},
     LineHasLessValues {line_num: usize, num_line_values: usize, num_header_values: usize},
     InvalidHeader {header: String},
     PointTracesError {error: PointTracesError},
+    FailedToLoadFiles { files: Vec<String> },
+    FailedToAnalyzeFile,
+    InvalidFileName,
+    InvalidDirectoryName,
 }

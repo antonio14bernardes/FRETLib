@@ -1,10 +1,10 @@
-use super::filter::{MinMaxMeanStd, ValuesToFilter};
+use super::filter::{FilterTest, MinMaxMeanStd, ValuesToFilter};
 use super::individual_trace::*;
 use super::tools::compute_mean_and_std;
 use std::collections::HashSet;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PointTraces {
     traces: HashSet<IndividualTrace>,
     metadata: Option<PointFileMetadata>,
@@ -154,6 +154,37 @@ impl PointTraces {
 
     pub fn insert_metadata(&mut self, metadata_obj: PointFileMetadata) {
         self.metadata = Some(metadata_obj);
+    }
+
+    pub fn get_metadata(&self) -> Option<&PointFileMetadata> {
+        self.metadata.as_ref()
+    }
+
+    pub fn get_valid_fret(&self) -> Result<&[f64], PointTracesError> {
+        // Get the FRET trace
+        let fret = self.get_trace(&TraceType::FRET)
+        .ok_or(PointTracesError::TraceTypeNotPresent { trace_type: TraceType::FRET })?;
+
+        // Extract values
+        let values = fret.get_values();
+
+        // Extract photobleaching idx
+        let donor_pb_option = self.donor_photobleaching.as_ref();
+        let acceptor_pb_option = self.acceptor_photobleaching.as_ref();
+
+        if donor_pb_option.is_none() || acceptor_pb_option.is_none() {
+            return Err(PointTracesError::FilteringNotPerformed)
+        }
+
+        let donor_pb_vec = donor_pb_option.unwrap();
+        let acceptor_db_vec = acceptor_pb_option.unwrap();
+
+        let donor_pb = if donor_pb_vec.len() > 0 {donor_pb_vec[donor_pb_vec.len() - 1]} else {values.len()-1};
+        let acceptor_pb = if acceptor_db_vec.len() > 0 {acceptor_db_vec[acceptor_db_vec.len() - 1]} else {values.len()-1};
+
+        let earliest_pb = if donor_pb < acceptor_pb {donor_pb} else {acceptor_pb};
+
+        Ok(&values[..earliest_pb])
     }
 
     pub fn check_donor_acceptor_pair(&mut self) -> Result<(), PointTracesError> {
@@ -427,12 +458,14 @@ impl PointTraces {
     ) -> Result<ValuesToFilter, PointTracesError>{
         self.update_donor_acceptor();
 
-        if let Err(e) = self.detect_photobleaching(photobleaching_filter_values) {
-            if let PointTracesError::NoAcceptorFound = e {} // Ignore this error 
-            else {
-                return Err(e); // Only propagate if it's not NoAcceptorFound
-            }
-        }
+        // if let Err(e) = self.detect_photobleaching(photobleaching_filter_values) {
+        //     if let PointTracesError::NoAcceptorFound = e {} // Ignore this error 
+        //     else {
+        //         return Err(e); // Only propagate if it's not NoAcceptorFound
+        //     }
+        // }
+
+        self.detect_photobleaching(photobleaching_filter_values)?;
         self.compute_total_pair_intensity()?;
         self.compute_intensity_snr_and_noise()?;
         self.compute_pair_correlation()?;
@@ -440,15 +473,19 @@ impl PointTraces {
         self.get_fret_lifetimes(fret_lifetimes_filter_values)?;
         self.first_max_average_fret()?;
 
+        let snr_bkg = self.snr_backgroung.unwrap();
+        let std_bkg = self.background_std_post_bleach.unwrap();
+
+
 
         let values_to_filter = ValuesToFilter{
             donor_photobleaching: self.donor_photobleaching.as_ref().unwrap().clone(),
             fret_lifetimes: self.fret_lifetimes.as_ref().unwrap().clone(),
             // donor_blinking_events: Vec<usize>,
             snr_signal: self.snr_signal.unwrap(), 
-            snr_backgroung: self.snr_backgroung.unwrap(),
+            snr_background: if snr_bkg != 0.0 {Some(snr_bkg)} else {None}, // snr is 0 if there was no photobleaching event
             correlation_coef: self.correlation_coef.unwrap(),
-            background_std_post_bleach: self.background_std_post_bleach.unwrap(),
+            background_std_post_bleach: if std_bkg != 0.0 {Some(std_bkg)} else {None}, // snr is 0 if there was no photobleaching event
             intensity_min_man_mean_std: self.intensity_min_max_mean_std.as_ref().unwrap().clone(),
             first_fret: self.first_fret.unwrap(),
             max_fret: self.max_fret.unwrap(),
@@ -459,16 +496,18 @@ impl PointTraces {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PointFileMetadata {
-    file_date: String,
-    movie_filename: String,
-    fret_pair: usize,
+    pub file_path: String,
+    pub file_date: String,
+    pub movie_filename: String,
+    pub fret_pair: usize,
 }
 
 impl PointFileMetadata {
-    pub fn new(file_date: String, movie_filename: String, fret_pair: usize) -> Self {
+    pub fn new(file_path: String, file_date: String, movie_filename: String, fret_pair: usize) -> Self {
         Self {
+            file_path,
             file_date,
             movie_filename,
             fret_pair,
@@ -476,7 +515,7 @@ impl PointFileMetadata {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PointTracesError {
     TraceTypeAlreadyPresent{trace_type: TraceType},
     TraceTypeNotPresent{trace_type: TraceType},
@@ -484,8 +523,12 @@ pub enum PointTracesError {
     NoDonorAcceptorPairFound,
     NoDonorFound,
     NoAcceptorFound,
+    NoFretFound,
     StdZero,
 
     PhotobleachingDetectionNotPerformed,
     PhotobleachingNotFound,
+
+    FailedFilterTests{ tests_failed: Vec<FilterTest>},
+    FilteringNotPerformed,
 }
