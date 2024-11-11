@@ -8,6 +8,7 @@ use super::super::optimizer::{Optimizer, OptimizationError};
 use super::super::set_of_var_subsets::*;
 use super::super::variable_subsets::*;
 use super::amalgam_parameters::*;
+use super::verbosity::{YapLevel, Yapper};
 
 #[derive(Clone)]
 pub struct AmalgamIdea<F, Fitness> 
@@ -35,6 +36,9 @@ Fitness: OptimizationFitness
 
     pub(super) init_with_manual_distribution: bool, // True if the user initializes the distribution instead of the population
     pub(super) manual_pop_size: Option<usize>, // Give the option for the user to set the population size manually without changing any other parameters
+
+    pub(super) yapper: Option<Yapper>,
+    pub(super) verbosity_level: YapLevel,
 }
 
 
@@ -71,7 +75,10 @@ Fitness: OptimizationFitness
             c_mult: None,
 
             init_with_manual_distribution: false,
-            manual_pop_size: None
+            manual_pop_size: None,
+
+            yapper: None,
+            verbosity_level: YapLevel::ALot,
         }
     } 
 
@@ -252,6 +259,10 @@ Fitness: OptimizationFitness
         self.manual_pop_size = Some(pop_size);
 
         Ok(())
+    }
+
+    pub fn set_verbosity(&mut self, verbosity_level: YapLevel) {
+        self.verbosity_level = verbosity_level;
     }
 
     pub fn get_pop_size(&self) -> Option<usize> {
