@@ -1,10 +1,15 @@
 use std::collections::HashSet;
 
+use rand_distr::{Normal, Distribution};
+use rand::Rng;
+
 use super::hmm_tools::{StateMatrix2D, StateMatrix3D};
 use super::state::*;
 use super::hmm_matrices::*;
 use super::viterbi::*;
 use super::probability_matrices::*;
+
+pub const VALUE_SEQUENCE_THRESHOLD: f64 = 1e-10;
 
 pub struct HMMInstance<'a> {
     states: Option<&'a [State]>,
@@ -146,7 +151,7 @@ impl<'a> HMMInstance<'a> {
     pub fn check_states_validity(states: &[State]) -> Result<(), HMMInstanceError> {
         let mut state_ids: HashSet<usize> = HashSet::new();
         let mut state_values: Vec<f64> = Vec::new(); // Store state values here to manually check for duplicates
-        let mut expected_ids: Vec<usize> = (0..states.len()).collect(); // Expected sequence: [0, 1, 2, ..., N-1]
+        let expected_ids: Vec<usize> = (0..states.len()).collect(); // Expected sequence: [0, 1, 2, ..., N-1]
     
         let epsilon = 1e-8; // Tolerance for comparing floating-point numbers
     
@@ -201,15 +206,30 @@ impl<'a> HMMInstance<'a> {
 
         Ok(())
     }
-    
+
+    pub fn check_sequence_validity(observations: &[f64], tolerance: f64) -> Result<(), HMMInstanceError> {
+        if observations.len() == 0 {return Err(HMMInstanceError::EmptyValueSequence)}
+
+        let min_value= observations.iter().min_by(|a, b| a.total_cmp(b)).unwrap();
+        let max_value= observations.iter().max_by(|a, b| a.total_cmp(b)).unwrap();
+        let range = max_value - min_value;
+        if range <= tolerance {return Err(HMMInstanceError::ConstantValueSequence)}
+
+        if observations.iter().any(|value| value.is_nan()) {return Err(HMMInstanceError::ValueSequenceContainsNANs)}
+
+        Ok(())
+    }
     
     pub fn run_viterbi(&mut self, observations: &[f64]) -> Result<(),HMMInstanceError> {
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
+
         self.viterbi.run(observations, false)
     }
 
     pub fn run_alphas(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
 
         // Extract states and matrices
         let states = self.states.unwrap();
@@ -236,6 +256,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_betas(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
 
         // Extract states and matrices
         let states = self.states.unwrap();
@@ -253,6 +274,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_gammas(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
         if self.alphas.is_none() || self.betas.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
 
 
@@ -273,6 +295,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_xis(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
         if self.alphas.is_none() || self.betas.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
 
 
@@ -317,6 +340,7 @@ impl<'a> HMMInstance<'a> {
     pub fn run_alphas_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
 
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
 
         // Extract states and matrices
         let states = self.states.unwrap();
@@ -349,6 +373,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_betas_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError> {
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
 
         // Extract states and matrices
         let states = self.states.unwrap();
@@ -369,6 +394,7 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_gammas_with_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
         if self.alphas_scaled.is_none() || self.betas_scaled.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
 
         // Extract states and matrices
@@ -388,6 +414,8 @@ impl<'a> HMMInstance<'a> {
 
     pub fn run_xis_with_scaled(&mut self, observations: &[f64]) -> Result<(), HMMInstanceError>{
         Self::check_validity(self.states, self.start_matrix, self.transition_matrix)?;
+        Self::check_sequence_validity(observations, VALUE_SEQUENCE_THRESHOLD)?;
+
         if self.alphas_scaled.is_none() || self.betas_scaled.is_none() { return Err(HMMInstanceError::AlphasORBetasNotYetDefined)}
         if self.scaling_factors.is_none() {return Err(HMMInstanceError::ScalingFactorsNotYetDefined)}
 
@@ -562,6 +590,64 @@ impl<'a> HMMInstance<'a> {
         Ok(states)
     }
 
+    pub fn gen_sequence(
+        states: &[State], 
+        start_matrix: &StartMatrix, 
+        transition_matrix: &TransitionMatrix, 
+        time_steps: usize
+    ) -> (Vec<usize>, Vec<f64>) {
+        let mut rng = rand::thread_rng();
+        let mut sequence = Vec::with_capacity(time_steps);
+        let mut values = Vec::with_capacity(time_steps);
+    
+        // Start by choosing the initial state based on the start matrix
+        let mut cumulative_prob = 0.0;
+        let random_value = rng.gen_range(0.0..1.0);
+        let mut current_state = 0;
+    
+        for (state, &start_prob) in start_matrix.matrix.iter().enumerate() {
+            cumulative_prob += start_prob;
+            if random_value < cumulative_prob {
+                current_state = state;
+                break;
+            }
+        }
+        sequence.push(current_state);
+    
+        // Get theb objects for the Normal dist of each state
+        let normal_distributions: Vec<Normal<f64>> = states
+            .iter()
+            .map(|state| Normal::new(state.value, state.noise_std).unwrap())
+            .collect();
+    
+        // Sample the value for the initial state
+        let initial_value = normal_distributions[current_state].sample(&mut rng);
+        values.push(initial_value);
+    
+        // Generate the remaining states based on the transition matrix
+        for _ in 1..time_steps {
+            cumulative_prob = 0.0;
+            let random_value = rng.gen_range(0.0..1.0);
+            let transition_probs = &transition_matrix.matrix[current_state];
+    
+            for (next_state, &trans_prob) in transition_probs.iter().enumerate() {
+                cumulative_prob += trans_prob;
+                if random_value < cumulative_prob {
+                    current_state = next_state;
+                    break;
+                }
+            }
+    
+            sequence.push(current_state);
+    
+            // Sample from this state's dist to get the current value
+            let state_value = normal_distributions[current_state].sample(&mut rng);
+            values.push(state_value);
+        }
+    
+        (sequence, values)
+    }
+
 
 
     
@@ -575,7 +661,7 @@ impl<'a> HMMInstance<'a> {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HMMInstanceError {
     UndefinedStates,                                // States field is None
     UndefinedStartMatrix,                           // StartMatrix is None
@@ -599,4 +685,8 @@ pub enum HMMInstanceError {
     StateError {error: StateError},                 // Wrapper for a state error
 
     InvalidStateParametersLen,
+    EmptyValueSequence,
+    InvalidValueSequence,
+    ConstantValueSequence,
+    ValueSequenceContainsNANs,
 }
