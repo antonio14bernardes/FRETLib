@@ -1,5 +1,5 @@
 use super::analysis::hmm_analyzer::{HMMAnalyzer, HMMAnalyzerError};
-use super::hmm_initializer::InitializationMethods;
+use super::InitializationMethods;
 use super::initialization::eval_clusters::ClusterEvaluationMethod;
 use super::learning::learner_trait::HMMLearnerTrait;
 use super::{HMMInitializer, HMMLearner, HMMNumStatesFinder, StartMatrix, State, TransitionMatrix};
@@ -218,7 +218,6 @@ impl HMM {
             let (num_states, sequence_set) = self.run_num_states_finder(current_input)?;
 
             current_input = HMMInput::Initializer { num_states, sequence_set};
-            println!("Ran Num states finder");
 
         }
         if self.initializer.is_some(){
@@ -226,7 +225,6 @@ impl HMM {
             self.run_initializer(current_input)?;
 
             current_input = HMMInput::Learner { num_states, sequence_set, learner_init };
-            println!("Ran Initializer");
 
         }
         if self.learner.is_some() {
@@ -235,11 +233,9 @@ impl HMM {
 
             current_input = HMMInput::Analyzer { sequence_set, states, start_matrix, transition_matrix };
 
-            println!("Ran Learner");
         }
 
         self.run_analyzer(current_input)?;
-        println!("Ran Analyzer");
 
         Ok(())
     }
