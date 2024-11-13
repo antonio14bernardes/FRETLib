@@ -1,4 +1,5 @@
 use super::analysis::hmm_analyzer::{HMMAnalyzer, HMMAnalyzerError};
+use super::hmm_instance::{HMMInstance, HMMInstanceError};
 use super::InitializationMethods;
 use super::initialization::eval_clusters::ClusterEvaluationMethod;
 use super::learning::learner_trait::HMMLearnerTrait;
@@ -213,6 +214,9 @@ impl HMM {
     }
 
     pub fn run(&mut self, input: HMMInput) -> Result<(), HMMError> {
+        // Check input intrinsic validity
+        input.check_validity().map_err(|err| HMMError::InputError { err })?;
+
         let mut current_input = input;
         if self.num_states_finder.is_some() {
             let (num_states, sequence_set) = self.run_num_states_finder(current_input)?;
@@ -254,6 +258,73 @@ pub enum HMMInput {
     Analyzer{sequence_set: Vec<Vec<f64>>, states: Vec<State>, start_matrix: StartMatrix, transition_matrix: TransitionMatrix},
 }
 
+impl HMMInput {
+    pub fn check_validity(&self) -> Result<(), HMMInputError> {
+        match self {
+            Self::NumStatesFinder { sequence_set } => Self::check_sequence_set_validity(sequence_set)?,
+            Self::Initializer { num_states, sequence_set } => {
+                Self::check_sequence_set_validity(sequence_set)?;
+                Self::check_num_states_validity(*num_states)?;
+            },
+            Self::Learner { num_states, sequence_set, .. } => { // LearnerSpecificInput is tested in the learner itself
+                Self::check_sequence_set_validity(sequence_set)?;
+                Self::check_num_states_validity(*num_states)?;
+            }
+            Self::Analyzer { sequence_set, states, start_matrix, transition_matrix } => {
+                Self::check_sequence_set_validity(sequence_set)?;
+                Self::check_states_validity(states)?;
+                let num_states = states.len();
+                Self::check_start_matrix_validity(start_matrix, num_states)?;
+                Self::check_transition_matrix_validity(transition_matrix, num_states)?;
+            }
+
+        }
+
+        Ok(())
+    }
+    fn check_sequence_set_validity(sequence_set: &Vec<Vec<f64>>) -> Result<(), HMMInputError> {
+        if sequence_set.is_empty() {return Err(HMMInputError::SequenceSetIsEmpty)}
+        for sequence in sequence_set {
+            let res = HMMInstance::check_sequence_validity(sequence);
+
+            match res {
+                Err(HMMInstanceError::EmptyValueSequence) => return Err(HMMInputError::SequenceSetCointaintsNANs),
+                Err(HMMInstanceError::ValueSequenceContainsNANs) => return Err(HMMInputError::SequenceSetCointaintsNANs),
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    fn check_num_states_validity(num_states: usize) -> Result<(), HMMInputError> {
+        if num_states == 0 {return Err(HMMInputError::InvalidNumStates)}
+
+        Ok(())
+    }
+
+    fn check_states_validity(states: &Vec<State>) -> Result<(), HMMInputError> {
+        HMMInstance::check_states_validity(states)
+        .map_err(|_| HMMInputError::InvalidStates)?;
+        
+        Ok(())
+    }
+
+    fn check_start_matrix_validity(start_matrix: &StartMatrix, num_states: usize) -> Result<(), HMMInputError> {
+        HMMInstance::check_start_matrix_validity(start_matrix, num_states)
+        .map_err(|_| HMMInputError::InvalidStartMatrix)?;
+
+        Ok(())
+    }
+
+    fn check_transition_matrix_validity(transition_matrix: &TransitionMatrix, num_states: usize) -> Result<(), HMMInputError> {
+        HMMInstance::check_transition_matrix_validity(transition_matrix, num_states)
+        .map_err(|_| HMMInputError::InvalidTransitionMatrix)?;
+
+        Ok(())
+    }
+}
+
 pub enum NumStatesFindStratWrapper {
     KMeansClustering {num_tries: Option<usize>, max_iters: Option<usize>, tolerance: Option<f64>, method: Option<ClusterEvaluationMethod>},
     BaumWelch,
@@ -274,6 +345,7 @@ pub enum HMMError {
     LearnerError{err: HMMLearnerError},
     InitializerError{err: HMMInitializerError},
     NumStatesFinderError{err: HMMNumStatesFinderError},
+    InputError{err: HMMInputError},
 
     LearnerNotDefined,
     LearnerNotSetup,
@@ -283,6 +355,19 @@ pub enum HMMError {
     NumStatesFinderNotDefined,
 
     IncompatibleInput{expected: HMMComponent},
+}
+
+#[derive(Debug)]
+pub enum HMMInputError{
+    SequenceSetIsEmpty,
+    SequenceSetContaintsEmptySequence,
+    SequenceSetCointaintsNANs,
+
+    InvalidNumStates,
+
+    InvalidStates,
+    InvalidStartMatrix,
+    InvalidTransitionMatrix,
 }
 
 #[cfg(test)]

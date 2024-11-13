@@ -253,7 +253,7 @@ impl HMMInitializer {
 pub(super) fn check_validity(num_states: usize, sequence_values:&[f64]) -> Result<(), HMMInitializerError> {
     if num_states == 0 {return Err(HMMInitializerError::InvalidNumberOfStates)}
 
-    HMMInstance::check_sequence_validity(sequence_values, VALUE_SEQUENCE_THRESHOLD)
+    HMMInstance::check_sequence_validity(sequence_values)
     .map_err(|err| HMMInitializerError::HMMInstanceError { err })?;
 
     Ok(())

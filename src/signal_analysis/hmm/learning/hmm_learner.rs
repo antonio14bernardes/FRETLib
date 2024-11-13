@@ -110,6 +110,7 @@ impl HMMLearnerTrait for HMMLearner {
 
         Ok(())
     }
+    
     fn initialize_learner(
         &mut self,
         num_states: usize, 
