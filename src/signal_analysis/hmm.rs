@@ -31,7 +31,8 @@ use initialization::hmm_initializer::{HMMInitializer, HMMInitializerError};
 use learning::{hmm_learner::HMMLearner, learner_trait::HMMLearnerError};
 use number_states_finder::hmm_num_states_finder::{HMMNumStatesFinder, HMMNumStatesFinderError};
 
-pub use initialization::hmm_initializer::{self, StateValueInitMethod, StateNoiseInitMethod, StartMatrixInitMethod,TransitionMatrixInitMethod, InitializationMethods};
+pub use initialization::hmm_initializer::InitializationMethods;
+pub use initialization::init_method_structs::{StateValueInitMethod, StateNoiseInitMethod, StartMatrixInitMethod,TransitionMatrixInitMethod};
 pub use learning::{hmm_learner, learner_trait::{LearnerSpecificInitialValues, LearnerType, LearnerSpecificSetup}};
 pub use number_states_finder::hmm_num_states_finder::NumStatesFindStrat;
 

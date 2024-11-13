@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+pub const MIN_STATE_NOISE_STD: f64 = 1e-3;
+
 #[derive(Debug, Clone)]
 pub struct State {
     pub id: usize,
@@ -10,12 +12,15 @@ pub struct State {
 
 impl State {
     // Constructor to create a new State.
-    // Name is always set to None when isntantiating
+    // Name is always set to None when instantiating
     // Use method set_name to give the state a cool name
     pub fn new(id: usize, value: f64, noise_std: f64) -> Result<Self, StateError> {
         if noise_std <= 0.0 {
             return Err(StateError::InvalidNoiseInput { input: noise_std });
         }
+
+        // Set a lower limit to the noise_std
+        let noise_std = if noise_std <= MIN_STATE_NOISE_STD {MIN_STATE_NOISE_STD} else {noise_std};
 
         Ok(State {
             id,
@@ -49,6 +54,9 @@ impl State {
 
         let value = rand::random::<f64>() * value_range + min_value;  // Random value between min_value and max_value
         let noise_std = rand::random::<f64>() * noise_range + min_noise;  // Random noise between min_noise and max_noise
+
+        // Set a lower limit to the noise_std
+        let noise_std = if noise_std <= MIN_STATE_NOISE_STD {MIN_STATE_NOISE_STD} else {noise_std};
 
     
         Ok(State {

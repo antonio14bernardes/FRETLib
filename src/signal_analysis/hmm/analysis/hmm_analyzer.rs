@@ -1,6 +1,6 @@
 use core::f64;
 
-use crate::signal_analysis::hmm::{hmm_instance::{HMMInstance, HMMInstanceError, VALUE_SEQUENCE_THRESHOLD}, IDTarget, StartMatrix, State, TransitionMatrix};
+use crate::signal_analysis::hmm::{hmm_instance::{HMMInstance, HMMInstanceError}, IDTarget, StartMatrix, State, TransitionMatrix};
 
 #[derive(Debug)]
 pub struct HMMAnalyzer {
@@ -34,7 +34,7 @@ impl HMMAnalyzer {
 
     pub fn set_sequence_set(&mut self, sequence_set: &Vec<Vec<f64>>) -> Result<(), HMMAnalyzerError> {
         for sequence_values in sequence_set {
-            HMMInstance::check_sequence_validity(sequence_values, VALUE_SEQUENCE_THRESHOLD)
+            HMMInstance::check_sequence_validity(sequence_values)
             .map_err(|err| HMMAnalyzerError::HMMInstanceError { err })?;
         }
         
