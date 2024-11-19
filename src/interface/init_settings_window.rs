@@ -7,7 +7,7 @@ use crate::signal_analysis::hmm::{initialization::{eval_clusters::ClusterEvaluat
 use super::learn_settings_window::render_numeric_input_with_layout;
 
 #[derive(Debug, Clone, PartialEq)]
-enum InitTab {
+pub enum InitTab {
     StateValue,
     StateNoise,
     StartMatrix,
@@ -55,8 +55,9 @@ impl InitializationSettingsWindow {
         if self.is_open {
             egui::Window::new("Initialization Settings")
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .resizable(true)
-                .default_size([600.0, 400.0])
+                .collapsible(false)
+                // .resizable(true)
+                .fixed_size([600.0, 400.0])
                 .show(ctx, |ui| {
                     ui.vertical(|ui| {
                         // Tab Bar for switching between settings
@@ -192,13 +193,35 @@ impl InitializationSettingsWindow {
                     max_iters.get_or_insert(KMEANS_MAX_ITERS_DEFAULT),
                     &mut self.input_buffers,
                 );
-                render_numeric_input_with_layout(
-                    ui,
-                    "Tolerance:",
-                    "state_value_tolerance",
-                    tolerance.get_or_insert(KMEANS_TOLERANCE_DEFAULT),
-                    &mut self.input_buffers,
-                );
+                ui.horizontal(|ui| {
+                    ui.label("Tolerance:");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Retrieve or initialize the buffer
+                        let buffer = self
+                            .input_buffers
+                            .entry("tolerance".to_string())
+                            .or_insert_with(|| tolerance.unwrap_or(KMEANS_TOLERANCE_DEFAULT).to_string());
+                
+                        // Render the text edit and capture response
+                        let response = ui.add_sized([100.0, 20.0], |ui: &mut egui::Ui| ui.text_edit_singleline(buffer));
+                
+                        // Validate and update on losing focus
+                        if response.lost_focus() {
+                            if let Ok(parsed) = buffer.parse::<f64>() {
+                                if parsed < 0.0 {
+                                    // Reset to the previous valid value if negative
+                                    *buffer = tolerance.unwrap_or(KMEANS_TOLERANCE_DEFAULT).to_string();
+                                } else {
+                                    // Update tolerance with valid parsed value
+                                    *tolerance = Some(parsed);
+                                }
+                            } else {
+                                // Reset to the previous valid value if parsing fails
+                                *buffer = tolerance.unwrap_or(KMEANS_TOLERANCE_DEFAULT).to_string();
+                            }
+                        }
+                    });
+                });
                 render_numeric_input_with_layout(
                     ui,
                     "Number of Tries:",
@@ -293,6 +316,7 @@ impl InitializationSettingsWindow {
             }
         }
 
+
         // println!("State values: {:?}", self.state_value_init);
     }
 
@@ -361,11 +385,91 @@ impl InitializationSettingsWindow {
         }
     }
     fn render_start_matrix_settings(&mut self, ui: &mut egui::Ui) {
-        
+        // Dropdown to select the start matrix initialization method
+        let current_method = self.start_matrix_init.to_str().to_string();
+        ui.horizontal(|ui| {
+            ui.label("Start Matrix Method:");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                egui::ComboBox::from_id_source("start_matrix_init_method")
+                    .selected_text(current_method.clone())
+                    .width(200.0)
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_value(
+                                &mut self.start_matrix_init,
+                                StartMatrixInitMethod::Balanced,
+                                "Balanced",
+                            )
+                            .clicked()
+                        {}
+    
+                        if ui
+                            .selectable_value(
+                                &mut self.start_matrix_init,
+                                StartMatrixInitMethod::Random,
+                                "Random",
+                            )
+                            .clicked()
+                        {}
+                    });
+            });
+        });
+    
+        ui.add_space(10.0);
+    
+        // Render settings for the selected initialization method
+        match &self.start_matrix_init {
+            StartMatrixInitMethod::Balanced => {
+                ui.label("Method: Balanced. No additional settings.");
+            }
+            StartMatrixInitMethod::Random => {
+                ui.label("Method: Random. No additional settings.");
+            }
+        }
     }
 
     fn render_transition_matrix_settings(&mut self, ui: &mut egui::Ui) {
-        
+        // Dropdown to select the transition matrix initialization method
+        let current_method = self.transition_matrix_init.to_str().to_string();
+        ui.horizontal(|ui| {
+            ui.label("Transition Matrix Method:");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                egui::ComboBox::from_id_source("transition_matrix_init_method")
+                    .selected_text(current_method.clone())
+                    .width(200.0)
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_value(
+                                &mut self.transition_matrix_init,
+                                TransitionMatrixInitMethod::Balanced,
+                                "Balanced",
+                            )
+                            .clicked()
+                        {}
+    
+                        if ui
+                            .selectable_value(
+                                &mut self.transition_matrix_init,
+                                TransitionMatrixInitMethod::Random,
+                                "Random",
+                            )
+                            .clicked()
+                        {}
+                    });
+            });
+        });
+    
+        ui.add_space(10.0);
+    
+        // Render settings for the selected initialization method
+        match &self.transition_matrix_init {
+            TransitionMatrixInitMethod::Balanced => {
+                ui.label("Method: Balanced. No additional settings.");
+            }
+            TransitionMatrixInitMethod::Random => {
+                ui.label("Method: Random. No additional settings.");
+            }
+        }
     }
 
     fn ensure_correct_state_hints(&mut self) {
@@ -417,6 +521,24 @@ impl StateNoiseInitMethod {
     pub fn to_str(&self) -> &str {
         match self {
             StateNoiseInitMethod::Sparse { .. } => "Sparse",
+        }
+    }
+}
+
+impl StartMatrixInitMethod {
+    pub fn to_str(&self) -> &str {
+        match self {
+            StartMatrixInitMethod::Balanced => "Balanced",
+            StartMatrixInitMethod::Random => "Random",
+        }
+    }
+}
+
+impl TransitionMatrixInitMethod {
+    pub fn to_str(&self) -> &str {
+        match self {
+            TransitionMatrixInitMethod::Balanced => "Balanced",
+            TransitionMatrixInitMethod::Random => "Random",
         }
     }
 }

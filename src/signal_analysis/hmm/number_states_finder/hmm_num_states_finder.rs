@@ -146,6 +146,8 @@ pub enum NumStatesFindStrat {
     CurrentSetup{initializer: HMMInitializer, learner: HMMLearner},
 }
 
+
+
 impl NumStatesFindStrat {
     pub fn default() -> Self {
         NumStatesFindStrat::KMeansClustering{

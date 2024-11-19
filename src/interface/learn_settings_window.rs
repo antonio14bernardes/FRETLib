@@ -380,18 +380,18 @@ pub(super) fn render_numeric_input_with_layout<T>(
                     .entry(buffer_key.to_string())
                     .or_insert_with(|| value.to_string());
 
-                ui.add_space(10.0);
                 let response = ui.text_edit_singleline(buffer);
 
-                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                // Update value on focus loss or invalid input
+                if response.lost_focus() {
                     if let Ok(parsed) = buffer.parse::<T>() {
-                        *value = parsed;
+                        *value = parsed; // Update the actual value
                     } else {
-                        *buffer = value.to_string(); // Reset to previous valid value
+                        *buffer = value.to_string(); // Reset buffer to previous valid value
                     }
                 }
 
-                response // Explicitly return the response
+                response // Return the response for any additional chaining
             });
         });
     });

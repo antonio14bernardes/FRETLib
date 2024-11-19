@@ -1,5 +1,6 @@
 use super::analysis::hmm_analyzer::{HMMAnalyzer, HMMAnalyzerError};
 use super::hmm_instance::{HMMInstance, HMMInstanceError};
+use super::initialization::kmeans::{KMEANS_EVAL_METHOD_DEFAULT, KMEANS_MAX_ITERS_DEFAULT, KMEANS_NUM_TRIES_DEFAULT, KMEANS_TOLERANCE_DEFAULT};
 use super::InitializationMethods;
 use super::initialization::eval_clusters::ClusterEvaluationMethod;
 use super::learning::learner_trait::HMMLearnerTrait;
@@ -325,10 +326,22 @@ impl HMMInput {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum NumStatesFindStratWrapper {
     KMeansClustering {num_tries: Option<usize>, max_iters: Option<usize>, tolerance: Option<f64>, method: Option<ClusterEvaluationMethod>},
     BaumWelch,
     CurrentSetup, // remove this stuff here
+}
+
+impl Default for NumStatesFindStratWrapper {
+    fn default() -> Self {
+        NumStatesFindStratWrapper::KMeansClustering {
+            num_tries: Some(KMEANS_NUM_TRIES_DEFAULT),
+            max_iters: Some(KMEANS_MAX_ITERS_DEFAULT),
+            tolerance: Some(KMEANS_TOLERANCE_DEFAULT),
+            method: Some(KMEANS_EVAL_METHOD_DEFAULT),
+        }
+    }
 }
 
 #[derive(Debug)]

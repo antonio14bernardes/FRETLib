@@ -205,7 +205,7 @@ impl StateNoiseInitMethod {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StartMatrixInitMethod {
     Balanced,
     Random,
@@ -240,7 +240,7 @@ impl StartMatrixInitMethod {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TransitionMatrixInitMethod {
     Balanced,
     Random,

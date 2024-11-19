@@ -3,6 +3,7 @@ use super::app::Tab;
 use super::filter_settings_window::FilterSettingsWindow;
 use super::init_settings_window::InitializationSettingsWindow;
 use super::learn_settings_window::LearnSettingsWindow;
+use super::nsf_settings_window::FindNumberOfStatesWindow;
 
 pub struct MainTab {
     filter_enabled: bool,
@@ -14,6 +15,7 @@ pub struct MainTab {
     filter_settings_window: FilterSettingsWindow,
     learn_settings_window: LearnSettingsWindow,
     initialize_settings_window: InitializationSettingsWindow,
+    nsf_seettings_window: FindNumberOfStatesWindow,
 }
 
 impl Default for MainTab {
@@ -26,6 +28,7 @@ impl Default for MainTab {
             filter_settings_window: FilterSettingsWindow::new(),
             learn_settings_window: LearnSettingsWindow::new(),
             initialize_settings_window: InitializationSettingsWindow::new(),
+            nsf_seettings_window: FindNumberOfStatesWindow::new(),
         }
     }
 }
@@ -54,6 +57,9 @@ impl Tab for MainTab {
 
         // 6. Render the Initialize Settings Window
         self.initialize_settings_window.show(ctx);
+
+        // 7. Render the Find Number of States Settings Window
+        self.nsf_seettings_window.show(ctx);
 
     }
 }
@@ -269,7 +275,7 @@ impl MainTab {
                             .link(egui::RichText::new("See options").size(12.0))
                             .clicked()
                         {
-                            // Open options for Find Number of States
+                            self.nsf_seettings_window.open();
                         }
                     });
                 });

@@ -35,6 +35,7 @@ pub use initialization::hmm_initializer::InitializationMethods;
 pub use initialization::init_method_structs::{StateValueInitMethod, StateNoiseInitMethod, StartMatrixInitMethod,TransitionMatrixInitMethod};
 pub use learning::{hmm_learner, learner_trait::{LearnerSpecificInitialValues, LearnerType, LearnerSpecificSetup}};
 pub use number_states_finder::hmm_num_states_finder::NumStatesFindStrat;
+pub use hmm_struct::NumStatesFindStratWrapper;
 
 
 pub use amalgam_integration::amalgam_modes::{AmalgamDependencies, AmalgamFitness};
