@@ -7,6 +7,7 @@ pub enum StateValueInitMethod {
     KMeansClustering{max_iters: Option<usize>, tolerance: Option<f64>, num_tries: Option<usize>, eval_method: Option<ClusterEvaluationMethod>},
     Random,
     Sparse,
+    StateHints{state_values: Vec<f64>},
     // Add others when they are implemented
 }
 
@@ -34,8 +35,9 @@ impl StateValueInitMethod {
                     num_tries: Some(num_tries_new),
                     eval_method: Some(eval_method_new) }
             }
-            Self::Random => {self}
-            Self::Sparse => {self}
+            Self::Random => self,
+            Self::Sparse => self,
+            Self::StateHints { .. } => self,
         }
     }
     pub fn get_state_values(&self, num_states: usize, sequence_set: &Vec<Vec<f64>>, dist: bool) -> Result<(Vec<f64>, Option<Vec<f64>>), HMMInitializerError>{
@@ -132,6 +134,24 @@ impl StateValueInitMethod {
                 let state_values: Vec<f64> = states.iter().map(|state| state.get_value()).collect();
 
                 return Ok((state_values, None));
+            }
+
+            StateValueInitMethod::StateHints { state_values } => {
+                if state_values.len() > num_states {return Err(HMMInitializerError::IncompatibleInputs)}
+                
+                let mut all_state_values = state_values.clone();
+                let num_values_left = num_states - all_state_values.len();
+
+                // Get full states but we only care about values here
+                let random_states = HMMInstance::generate_random_states(num_values_left as u16, Some(*max_value), Some(*min_value), None, None)
+                .map_err(|err| HMMInitializerError::StateError { err })?;
+
+                let random_state_values: Vec<f64> = random_states.iter().map(|state| state.get_value()).collect();
+
+                all_state_values.extend(random_state_values);
+
+
+                Ok((all_state_values, None))
             }
         }
 

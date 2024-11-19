@@ -212,6 +212,18 @@ impl HMMInitializer {
             StateValueInitMethod::Sparse => {
                 println!("  State Values Initialization Method: Sparse");
             }
+            StateValueInitMethod::StateHints { state_values } => {
+                let formatted_values: String = state_values
+                    .iter()
+                    .map(|value| value.to_string()) // Convert each value to a string
+                    .collect::<Vec<_>>() // Collect into a vector
+                    .join(", "); // Join values with a comma and a space
+
+                println!(
+                    "State Values Initialization Method: State Hints. With hinted state values: {}",
+                    formatted_values
+                );
+            }
         }
 
         // State Noises Initialization Method
@@ -450,6 +462,7 @@ pub enum HMMInitializerError {
     StateError{err: StateError},
     EmptyInitializationCluster,
     InvalidInput,
+    IncompatibleInputs,
 }
 
 #[cfg(test)]
