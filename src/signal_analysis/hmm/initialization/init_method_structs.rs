@@ -2,7 +2,7 @@ use crate::signal_analysis::hmm::{hmm_instance::HMMInstance, StartMatrix, Transi
 
 use super::{eval_clusters::{silhouette_score_1_d, simplified_silhouette_score_1_d, ClusterEvaluationMethod}, hmm_initializer::{check_validity, HMMInitializerError, START_PROB_STD, STATE_NOISE_MULT, STATE_NOISE_STD_MULT, TRANSITION_PROB_STD}, kmeans::*};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StateValueInitMethod {
     KMeansClustering{max_iters: Option<usize>, tolerance: Option<f64>, num_tries: Option<usize>, eval_method: Option<ClusterEvaluationMethod>},
     Random,
@@ -158,7 +158,7 @@ impl StateValueInitMethod {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StateNoiseInitMethod {
     Sparse{mult: Option<f64>},
 }

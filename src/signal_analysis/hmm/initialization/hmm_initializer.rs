@@ -9,10 +9,10 @@ use super::init_method_structs::*;
 
 use super::{eval_clusters::*, kmeans::*};
 
-pub(super) const STATE_NOISE_MULT: f64 = 0.5;
-pub(super) const STATE_NOISE_STD_MULT: f64 = 0.25;
-pub(super) const START_PROB_STD: f64 = 0.25;
-pub(super) const TRANSITION_PROB_STD: f64 = 0.25;
+pub(crate) const STATE_NOISE_MULT: f64 = 0.5;
+pub(crate) const STATE_NOISE_STD_MULT: f64 = 0.25;
+pub(crate) const START_PROB_STD: f64 = 0.25;
+pub(crate) const TRANSITION_PROB_STD: f64 = 0.25;
 
 
 pub struct InitializationMethods {

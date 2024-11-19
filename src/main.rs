@@ -33,6 +33,19 @@ use fret_lib::trace_selection::point_traces::{self, PointTraces};
 use fret_lib::trace_selection::trace_loader::*;
 use fret_lib::trace_selection::individual_trace::*;
 
+use eframe::egui;
+use fret_lib::interface::app::*;
+
+
+fn main() -> Result<(), eframe::Error> {
+    let options = eframe::NativeOptions::default();
+    eframe::run_native(
+        "FRET Analysis GUI",
+        options,
+        Box::new(|_cc| Box::new(MyApp::default())),
+    )
+}
+
 
 fn main_hmm() {
     // Define real system to get simulated time sequence
@@ -121,7 +134,7 @@ fn main_single_file() {
     println!("Filter ouptut: {:?}", output);    
 }
 
-fn main() {
+fn main_full_process() {
     let traces_dir = "/Users/antonio14bernardes/Documents/Internship/traces_data";
 
     let mut set_of_points = SetOfPoints::new();

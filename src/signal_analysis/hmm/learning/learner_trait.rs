@@ -33,7 +33,7 @@ impl Clone for Box<dyn HMMLearnerTrait> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LearnerType {
     AmalgamIdea,
     BaumWelch,

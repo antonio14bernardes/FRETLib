@@ -1,5 +1,9 @@
 use std::fmt;
 
+pub const TERMINATION_MAX_ITERATIONS_DEFAULT: u32 = 500;
+pub const TERMINATION_EPSILON_DEFAULT: f64 = 1e-5;
+pub const TERMINATION_PLATEAU_LENGTH: u16 = 20;
+
 pub struct OptimizationTracker {
     evals: Vec<f64>,
     iters: u32,
@@ -110,7 +114,7 @@ impl OptimizationTracker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TerminationCriterium {
     MaxIterations {max_iterations: u32}, // Stop once max iterations reached
     OneStepConvergence {epsilon: f64, max_iterations: Option<u32>}, // If previous relative improvement is below thresh, stop optimization
@@ -121,7 +125,11 @@ pub enum TerminationCriterium {
 
 impl TerminationCriterium {
     pub fn default() -> Self {
-        TerminationCriterium::PlateauConvergence { epsilon: 1e-5, plateau_len: 20, max_iterations: Some(500) }
+        TerminationCriterium::PlateauConvergence { 
+            epsilon: TERMINATION_EPSILON_DEFAULT,
+            plateau_len: TERMINATION_PLATEAU_LENGTH,
+            max_iterations: Some(TERMINATION_MAX_ITERATIONS_DEFAULT) 
+        }
     }
 }
 
