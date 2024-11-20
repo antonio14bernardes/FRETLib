@@ -16,6 +16,8 @@ pub trait HMMLearnerTrait: Debug{
 
     fn get_setup_data(&self) -> Option<&LearnerSpecificSetup>;
 
+    fn get_learner_type(&self) -> &LearnerType;
+
     fn get_log_likelihood(&self) -> Option<f64>;
 
     fn reset(&mut self); // reset up to the setup step

@@ -116,6 +116,10 @@ impl HMMLearnerTrait for AmalgamHMMWrapper {
         self.setup_data.as_ref()
     }
 
+    fn get_learner_type(&self) -> &LearnerType {
+        &LearnerType::AmalgamIdea
+    }
+
     fn get_log_likelihood(&self) -> Option<f64> {
         if let Some(amalgam) = self.amalgam.as_ref() {
             let best_sol_output = amalgam.get_best_solution();
@@ -265,6 +269,10 @@ impl HMMLearnerTrait for BaumWelchWrapper {
 
     fn get_setup_data(&self) -> Option<&LearnerSpecificSetup> {
         self.setup_data.as_ref()
+    }
+
+    fn get_learner_type(&self) -> &LearnerType {
+        &LearnerType::BaumWelch
     }
 
     fn get_log_likelihood(&self) -> Option<f64> {

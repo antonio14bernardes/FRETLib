@@ -22,6 +22,9 @@ use fret_lib::trace_selection::set_of_points::SetOfPoints;
 use nalgebra::{DMatrix, DVector};
 use rand::{seq, thread_rng, Rng};
 use plotters::prelude::*;
+use rfd::FileDialog;
+
+
 use fret_lib::signal_analysis::hmm::initialization::kmeans::*;
 use fret_lib::signal_analysis::hmm::initialization::eval_clusters::*;
 use fret_lib::signal_analysis::hmm::initialization::hmm_initializer::*;
@@ -37,6 +40,7 @@ use eframe::egui;
 use fret_lib::interface::app::*;
 
 
+
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
     eframe::run_native(
@@ -44,6 +48,8 @@ fn main() -> Result<(), eframe::Error> {
         options,
         Box::new(|_cc| Box::new(MyApp::default())),
     )
+
+    
 }
 
 
@@ -134,7 +140,7 @@ fn main_single_file() {
     println!("Filter ouptut: {:?}", output);    
 }
 
-fn main_full_process() {
+fn main_full() {
     let traces_dir = "/Users/antonio14bernardes/Documents/Internship/traces_data";
 
     let mut set_of_points = SetOfPoints::new();

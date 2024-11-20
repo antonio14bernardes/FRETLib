@@ -1,4 +1,7 @@
 use eframe::egui;
+use crate::signal_analysis::hmm::hmm_struct::HMM;
+use crate::trace_selection::set_of_points::SetOfPoints;
+
 use super::main_tab::*;
 use super::other_tab::*;
 
@@ -9,10 +12,15 @@ enum TabType {
 }
 
 pub trait Tab {
-    fn render(&mut self, ctx: &egui::Context);
+    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints);
 }
 
 pub struct MyApp {
+    // System stuff
+    hmm: HMM,
+    preprocessing: SetOfPoints,
+
+    // GUI stuff
     current_tab: TabType,
     main_tab: MainTab,
     other_tab: OtherTab,
@@ -21,6 +29,11 @@ pub struct MyApp {
 impl Default for MyApp {
     fn default() -> Self {
         Self {
+            // System stuff
+            hmm: HMM::new(),
+            preprocessing: SetOfPoints::new(),
+
+            // GUI styff
             current_tab: TabType::Main,
             main_tab: MainTab::default(),
             other_tab: OtherTab::default(),
@@ -67,8 +80,8 @@ impl eframe::App for MyApp {
 
         // Show the content of the current tab
         match self.current_tab {
-            TabType::Main => self.main_tab.render(ctx),
-            TabType::Other => self.other_tab.render(ctx),
+            TabType::Main => self.main_tab.render(ctx, &mut self.hmm, &mut self.preprocessing),
+            TabType::Other => self.other_tab.render(ctx, &mut self.hmm, &mut self.preprocessing),
         }
     }
 }

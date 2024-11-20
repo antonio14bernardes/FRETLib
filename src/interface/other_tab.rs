@@ -1,4 +1,6 @@
 use eframe::egui;
+use crate::{signal_analysis::hmm::hmm_struct::HMM, trace_selection::set_of_points::SetOfPoints};
+
 use super::app::Tab;
 
 pub struct OtherTab {
@@ -14,7 +16,7 @@ impl Default for OtherTab {
 }
 
 impl Tab for OtherTab {
-    fn render(&mut self, ctx: &egui::Context) {
+    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.centered_and_justified(|ui| {
                 ui.heading("Other Tab");

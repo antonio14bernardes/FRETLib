@@ -161,23 +161,25 @@ impl PointTraces {
     }
 
     pub fn get_valid_fret(&self) -> Result<&[f64], PointTracesError> {
+        println!("Got to the point traces function");
         // Get the FRET trace
         let fret = self.get_trace(&TraceType::FRET)
         .ok_or(PointTracesError::TraceTypeNotPresent { trace_type: TraceType::FRET })?;
 
         // Extract values
         let values = fret.get_values();
+        println!("Values: {:?}", values);
 
         // Extract photobleaching idx
-        let donor_pb_option = self.donor_photobleaching.as_ref();
-        let acceptor_pb_option = self.acceptor_photobleaching.as_ref();
+        let donor_pb_option = self.donor_photobleaching.clone();
+        let acceptor_pb_option = self.acceptor_photobleaching.clone();
 
-        if donor_pb_option.is_none() || acceptor_pb_option.is_none() {
-            return Err(PointTracesError::FilteringNotPerformed)
-        }
+        // if donor_pb_option.is_none() || acceptor_pb_option.is_none() {
+        //     return Err(PointTracesError::FilteringNotPerformed)
+        // }
 
-        let donor_pb_vec = donor_pb_option.unwrap();
-        let acceptor_db_vec = acceptor_pb_option.unwrap();
+        let donor_pb_vec: Vec<usize> = donor_pb_option.unwrap_or(Vec::new());
+        let acceptor_db_vec: Vec<usize> = acceptor_pb_option.unwrap_or(Vec::new());
 
         let donor_pb = if donor_pb_vec.len() > 0 {donor_pb_vec[donor_pb_vec.len() - 1]} else {values.len()-1};
         let acceptor_pb = if acceptor_db_vec.len() > 0 {acceptor_db_vec[acceptor_db_vec.len() - 1]} else {values.len()-1};

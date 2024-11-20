@@ -1,5 +1,6 @@
 use eframe::egui;
 use crate::trace_selection::filter::{self, Comparison, FilterSetup};
+use crate::trace_selection::set_of_points::SetOfPoints;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 use std::collections::HashMap;
@@ -20,11 +21,12 @@ impl FilterSettingsWindow {
         }
     }
 
-    pub fn open(&mut self) {
+    pub fn open(&mut self, preprocessing: &SetOfPoints) {
         self.is_open = true;
+        self.filter_setup = preprocessing.get_filter_setup().clone();
     }
 
-    pub fn show(&mut self, ctx: &egui::Context) {
+    pub fn show(&mut self, ctx: &egui::Context, preprocessing: &mut SetOfPoints) {
         if self.is_open {
             egui::Window::new("Configure Filter Settings")
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -70,12 +72,19 @@ impl FilterSettingsWindow {
                         // Reset and Close buttons
                         ui.horizontal(|ui| {
                             if ui.button("Set").clicked() {
-                                println!("Set button clicked (no functionality yet).");
-                                // Add functionality here: Store filter setup in the actual SetOfPointTraces
+                                println!("Set button clicked.");
+                                preprocessing.set_filter_setup(self.filter_setup.clone());
                             }
                             if ui.button("Reset").clicked() {
                                 self.reset_to_defaults();
                                 println!("Filter Settings Reset to Defaults");
+                            }
+
+                            // Clean button
+                            if ui.button("Clean").clicked() {
+                                self.filter_setup = FilterSetup::empty();
+                                self.input_buffers.clear(); // Optionally clear input buffers
+                                println!("Filter Settings Cleaned");
                             }
     
                             if ui.button("Close").clicked() {

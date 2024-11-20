@@ -44,14 +44,15 @@ pub struct HMMInitializer {
     verbose: bool,
 }
 
+
+
 impl HMMInitializer {
     pub fn new(learner_setup: &LearnerSpecificSetup) -> Self {
         HMMInitializer{
-            state_values_method: StateValueInitMethod::KMeansClustering 
-            { max_iters: None, tolerance: None, num_tries: None, eval_method: None },
-            state_noises_method: StateNoiseInitMethod::Sparse{mult: None},
-            start_matrix_method: StartMatrixInitMethod::Balanced,
-            transition_matrix_method: TransitionMatrixInitMethod::Balanced,
+            state_values_method: StateValueInitMethod::default(),
+            state_noises_method: StateNoiseInitMethod::default(),
+            start_matrix_method: StartMatrixInitMethod::default(),
+            transition_matrix_method: TransitionMatrixInitMethod::default(),
             learner_setup: learner_setup.clone(),
             verbose: true,
         }

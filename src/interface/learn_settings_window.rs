@@ -1,32 +1,60 @@
 use eframe::egui;
 use crate::signal_analysis::hmm::amalgam_integration::amalgam_modes::{AMALGAM_DEPENDENCY_DEFAULT, AMALGAM_FITNESS_DEFAULT, AMALGAM_ITER_MEMORY_DEFAULT, AMALGAM_MAX_ITERS_DEFAULT};
+use crate::signal_analysis::hmm::hmm_struct::HMM;
+use crate::signal_analysis::hmm::learning::learner_trait::HMMLearnerTrait;
 use crate::signal_analysis::hmm::optimization_tracker::TerminationCriterium;
 use crate::signal_analysis::hmm::{AmalgamDependencies, AmalgamFitness, LearnerSpecificSetup, LearnerType};
 use std::collections::HashMap;
 
 pub struct LearnSettingsWindow {
     pub is_open: bool,
+    is_set: bool,
     pub learner_type: LearnerType,
-    pub learner_setup: LearnerSpecificSetup,
-    pub input_buffers: HashMap<String, String>, // Temporary buffers for text inputs
+    pub learner_setup: LearnerSpecificSetup, // Aux to handle the set button
+    
+    input_buffers: HashMap<String, String>, // Temporary buffers for text inputs
+
+    learner_type_temp: LearnerType,  // Aux to handle the set button
+    learner_setup_temp: LearnerSpecificSetup,
+    
 }
 
 impl LearnSettingsWindow {
     pub fn new() -> Self {
         let learner_type = LearnerType::default();
         Self {
+            
             is_open: false,
+            is_set: false,
             learner_type: learner_type.clone(),
-            learner_setup: LearnerSpecificSetup::default(&learner_type),
+            learner_setup_temp: LearnerSpecificSetup::default(&learner_type),
             input_buffers: HashMap::new(),
+
+            learner_type_temp: learner_type.clone(),
+            learner_setup: LearnerSpecificSetup::default(&learner_type),
         }
     }
 
-    pub fn open(&mut self) {
+    pub fn open(&mut self, hmm: &HMM) {
         self.is_open = true;
+
+        // If we have clicked on set on the last opening of the window, keep the values stored then
+        if self.is_set {
+            self.is_set = false;
+            // Sync the buffers with the values in learner_setup
+            self.sync_buffers_with_setup();
+
+            return;
+        }
+        
+
+        // Sync the buffers with the values in learner_setup
+        self.sync_buffers_with_setup();
     }
 
-    pub fn show(&mut self, ctx: &egui::Context) {
+    pub fn show(&mut self, ctx: &egui::Context, ) {
+
+
         if self.is_open {
             egui::Window::new("Configure Learn Settings")
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -40,30 +68,30 @@ impl LearnSettingsWindow {
                         ui.label("Select Learner Type:");
     
                         // Store the previous learner type to detect changes
-                        let previous_learner_type = self.learner_type.clone();
+                        let previous_learner_type = self.learner_type_temp.clone();
     
                         ui.horizontal(|ui| {
                             ui.radio_value(
-                                &mut self.learner_type,
+                                &mut self.learner_type_temp,
                                 LearnerType::AmalgamIdea,
                                 "AMaLGaM IDEA",
                             );
                             ui.radio_value(
-                                &mut self.learner_type,
+                                &mut self.learner_type_temp,
                                 LearnerType::BaumWelch,
                                 "Baum-Welch",
                             );
                         });
     
                         // Check if learner type has changed
-                        if self.learner_type != previous_learner_type {
+                        if self.learner_type_temp != previous_learner_type {
                             println!(
                                 "Learner type changed from {:?} to {:?}",
-                                previous_learner_type, self.learner_type
+                                previous_learner_type, self.learner_type_temp
                             );
     
-                            // Update learner_setup based on the new learner type
-                            self.learner_setup = LearnerSpecificSetup::default(&self.learner_type);
+                            // Update learner_setup_temp based on the new learner type
+                            self.learner_setup_temp = LearnerSpecificSetup::default(&self.learner_type_temp);
     
                             // Optionally, clear input buffers
                             self.input_buffers.clear();
@@ -72,7 +100,7 @@ impl LearnSettingsWindow {
                         ui.add_space(20.0);
     
                         // Render settings based on the selected learner type
-                        match self.learner_type {
+                        match self.learner_type_temp {
                             LearnerType::AmalgamIdea => {
                                 self.render_amalgam_idea_settings(ui);
                             }
@@ -87,19 +115,27 @@ impl LearnSettingsWindow {
                         ui.horizontal(|ui| {
                             if ui.button("Set").clicked() {
                                 println!("Set button clicked (no functionality yet).");
-                                // Add functionality here for "Set" later
+                                self.is_set = true;
+                                self.learner_setup = self.learner_setup_temp.clone();
+                                self.learner_type = self.learner_type_temp.clone();
                             }
 
                             if ui.button("Reset").clicked() {
                                 println!("Reset button clicked.");
-                                // Reset learner_setup to the default for the current learner_type
-                                self.learner_setup = LearnerSpecificSetup::default(&self.learner_type);
+                                // Reset learner_setup_temp to the default for the current learner_type_temp
+                                self.learner_setup_temp = LearnerSpecificSetup::default(&self.learner_type_temp);
 
                                 // Clear input buffers to reflect defaults
                                 self.input_buffers.clear();
                             }
 
                             if ui.button("Close").clicked() {
+
+                                if !self.is_set {
+                                    self.learner_setup_temp = self.learner_setup.clone();
+                                    self.learner_type_temp = self.learner_type.clone()
+                                }
+                                
                                 self.is_open = false;
                                 println!("Learn Settings Window closed");
                             }
@@ -109,18 +145,18 @@ impl LearnSettingsWindow {
         }
     
         // println!("Learner type: {:?}", self.learner_type);
-        // println!("Learner setup {:?}", self.learner_setup);
+        println!("Learner setup {:?}", self.learner_setup);
     }
 
     fn render_amalgam_idea_settings(&mut self, ui: &mut egui::Ui) {
-        // Extract fields or break early if learner_setup is not AmalgamIdea
+        // Extract fields or break early if learner_setup_temp is not AmalgamIdea
         let (iter_memory, dependence_type, fitness_type, max_iterations) =
             if let LearnerSpecificSetup::AmalgamIdea {
                 iter_memory,
                 dependence_type,
                 fitness_type,
                 max_iterations,
-            } = &mut self.learner_setup
+            } = &mut self.learner_setup_temp
             {
                 (
                     iter_memory.get_or_insert(AMALGAM_ITER_MEMORY_DEFAULT),
@@ -233,10 +269,10 @@ impl LearnSettingsWindow {
     }
 
     fn render_baum_welch_settings(&mut self, ui: &mut egui::Ui) {
-        // Extract fields or initialize with default if learner_setup is not BaumWelch
+        // Extract fields or initialize with default if learner_setup_temp is not BaumWelch
         let termination_criterion = if let LearnerSpecificSetup::BaumWelch {
             termination_criterion,
-        } = &mut self.learner_setup
+        } = &mut self.learner_setup_temp
         {
             termination_criterion.get_or_insert_with(TerminationCriterium::default)
         } else {
@@ -357,6 +393,80 @@ impl LearnSettingsWindow {
     
         // Add spacing for clarity
         ui.add_space(20.0);
+    }
+
+    /// Sync buffers with the current learner setup
+    fn sync_buffers_with_setup(&mut self) {
+        self.input_buffers.clear();
+
+        match &self.learner_setup {
+            LearnerSpecificSetup::AmalgamIdea {
+                iter_memory,
+                dependence_type,
+                fitness_type,
+                max_iterations,
+            } => {
+                self.input_buffers.insert(
+                    "iter_memory".to_string(),
+                    iter_memory.unwrap_or(false).to_string(),
+                );
+                self.input_buffers.insert(
+                    "dependence_type".to_string(),
+                    dependence_type
+                        .as_ref()
+                        .map_or("".to_string(), |d| d.to_str().to_string()),
+                );
+                self.input_buffers.insert(
+                    "fitness_type".to_string(),
+                    fitness_type
+                        .as_ref()
+                        .map_or("".to_string(), |f| f.to_str().to_string()),
+                );
+                self.input_buffers.insert(
+                    "max_iterations".to_string(),
+                    max_iterations.unwrap_or(0).to_string(),
+                );
+            }
+            LearnerSpecificSetup::BaumWelch {
+                termination_criterion,
+            } => {
+                if let Some(criterion) = termination_criterion {
+                    self.input_buffers.insert(
+                        "termination_criterion".to_string(),
+                        criterion.to_str().to_string(),
+                    );
+
+                    match criterion {
+                        TerminationCriterium::MaxIterations { max_iterations } => {
+                            self.input_buffers.insert(
+                                "max_iterations".to_string(),
+                                max_iterations.to_string(),
+                            );
+                        }
+                        TerminationCriterium::OneStepConvergence { epsilon, .. }
+                        | TerminationCriterium::OneStepConvergenceAbsolute { epsilon, .. } => {
+                            self.input_buffers.insert("epsilon".to_string(), epsilon.to_string());
+                        }
+                        TerminationCriterium::PlateauConvergence {
+                            epsilon,
+                            plateau_len,
+                            ..
+                        }
+                        | TerminationCriterium::PlateauConvergenceAbsolute {
+                            epsilon,
+                            plateau_len,
+                            ..
+                        } => {
+                            self.input_buffers.insert("epsilon".to_string(), epsilon.to_string());
+                            self.input_buffers.insert(
+                                "plateau_len".to_string(),
+                                plateau_len.to_string(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

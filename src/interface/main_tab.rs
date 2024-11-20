@@ -1,27 +1,43 @@
 use eframe::egui;
+use crate::signal_analysis::hmm::hmm_struct::HMM;
+use crate::trace_selection::set_of_points::{SetOfPoints, SetOfPointsError};
+
 use super::app::Tab;
 use super::filter_settings_window::FilterSettingsWindow;
 use super::init_settings_window::InitializationSettingsWindow;
 use super::learn_settings_window::LearnSettingsWindow;
+use super::load_traces_window::LoadTracesWindow;
 use super::nsf_settings_window::FindNumberOfStatesWindow;
 
 pub struct MainTab {
     filter_enabled: bool,
+    filter_performed: bool,
+    received_sequence_set: Option<Vec<Vec<f64>>>,
+
     learn_enabled: bool,
     initialize_enabled: bool,
     num_states_find_enabled: bool,
 
-    // Seetings windows
+    // Settings windows
     filter_settings_window: FilterSettingsWindow,
     learn_settings_window: LearnSettingsWindow,
     initialize_settings_window: InitializationSettingsWindow,
     nsf_seettings_window: FindNumberOfStatesWindow,
+
+    // Trace loading window
+    load_traces_window: LoadTracesWindow,
+
+    // Log messages
+    logs: Vec<String>,
 }
 
 impl Default for MainTab {
     fn default() -> Self {
         Self {
             filter_enabled: true,
+            filter_performed: false,
+            received_sequence_set: None,
+
             learn_enabled: true,
             initialize_enabled: true,
             num_states_find_enabled: false,
@@ -29,6 +45,9 @@ impl Default for MainTab {
             learn_settings_window: LearnSettingsWindow::new(),
             initialize_settings_window: InitializationSettingsWindow::new(),
             nsf_seettings_window: FindNumberOfStatesWindow::new(),
+            load_traces_window: LoadTracesWindow::new(),
+
+            logs: Vec::new(),
         }
     }
 }
@@ -36,21 +55,20 @@ impl Default for MainTab {
 
 
 impl Tab for MainTab {
-    fn render(&mut self, ctx: &egui::Context) {
+    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints) {
         // The global styles are now applied in MyApp, so we don't need to call apply_global_styles here.
 
         // 1. Top Panel: Load Traces Button
-        let top_panel_height: f32 = 70.0;
-        self.top_panel(ctx, top_panel_height);
+        self.top_panel(ctx);
 
         // 2. Central Panel: Contains Side Panels
-        self.central_panel(ctx);
+        self.central_panel(ctx, preprocessing, hmm);
 
         // 3. Bottom Panel: Console Output (Resizable)
         self.bottom_panel(ctx);
 
         // 4. Render the Filter Settings Window
-        self.filter_settings_window.show(ctx);
+        self.filter_settings_window.show(ctx, preprocessing);
 
         // 5. Render the Learn Settings Window
         self.learn_settings_window.show(ctx);
@@ -61,19 +79,25 @@ impl Tab for MainTab {
         // 7. Render the Find Number of States Settings Window
         self.nsf_seettings_window.show(ctx);
 
+        // 8. Render the Trace Loading window
+        self.load_traces_window.show(ctx, preprocessing);
+
+
+        println!("filter: {:?}", preprocessing.get_filter_setup());
+
     }
 }
 
 impl MainTab {
     /// Draw the top panel with the "Load Traces" button.
-    fn top_panel(&self, ctx: &egui::Context, height: f32) {
+    fn top_panel(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("top_panel")
             .show(ctx, |ui| {
                 ui.add_space(15.0); // Add padding at the top
                 ui.horizontal(|ui| {
                     ui.add_space(10.0); // Add padding on the left
                     if ui.button("+ Load Traces").clicked() {
-                        // Add load trace logic here
+                        self.load_traces_window.open();
                     }
                 });
                 ui.add_space(10.0);
@@ -81,24 +105,23 @@ impl MainTab {
     }
 
     /// Draw the central panel containing side panels.
-    fn central_panel(&mut self, ctx: &egui::Context) {
+    fn central_panel(&mut self, ctx: &egui::Context, preprocessing: &mut SetOfPoints, hmm: &mut HMM ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             // Use ui.columns to divide the space into two columns
             ui.columns(2, |columns| {
                 // Left Panel Content
                 columns[0].vertical(|ui| {
-                    self.preprocessing_panel_content(ui);
+                    self.preprocessing_panel_content(ui, preprocessing);
                 });
 
                 // Right Panel Content
                 columns[1].vertical(|ui| {
-                    self.signal_analysis_panel_content(ui);
+                    self.signal_analysis_panel_content(ui, hmm);
                 });
             });
         });
     }
 
-    /// Draw the bottom panel (scrollable and resizable).
     fn bottom_panel(&self, ctx: &egui::Context) {
         egui::TopBottomPanel::bottom("bottom_panel")
             .resizable(true)
@@ -108,21 +131,21 @@ impl MainTab {
                     ui.add_space(10.0);
                     ui.heading("Console output");
                     ui.separator();
-
+    
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])
                         .show(ui, |ui| {
                             // Save the original spacing (global/default settings)
                             let original_spacing = ui.spacing().clone(); // Clone ensures a copy is saved
-
+    
                             // Temporarily reduce spacing for Monospace text
                             ui.spacing_mut().item_spacing.y = 2.0; // Smaller gap between lines for console-like text
-
+    
                             // Render console-like output
-                            for i in 0..30 {
-                                ui.monospace(format!("Log Line {}", i + 1)); // Monospace text for console output
+                            for log in &self.logs {
+                                ui.monospace(log);
                             }
-
+    
                             // Restore the original spacing after Monospace text
                             *ui.spacing_mut() = original_spacing;
                         });
@@ -131,14 +154,42 @@ impl MainTab {
     }
 
     /// Content of the preprocessing panel.
-    fn preprocessing_panel_content(&mut self, ui: &mut egui::Ui) {
+    fn preprocessing_panel_content(&mut self, ui: &mut egui::Ui, preprocessing: &mut SetOfPoints) {
         ui.add_space(10.0); // Add padding at the top
         ui.vertical(|ui| {
             ui.add_space(10.0); // Add left padding
             ui.horizontal(|ui| {
                 ui.add_space(10.0); // Left padding for the button
                 if ui.button("Run Preprocessing").clicked() {
-                    // Add preprocessing logic here
+                    // Check if files have been loaded
+                    if !self.has_files_loaded(preprocessing) {
+                        self.logs.push("Preprocessing failed: No files have been loaded.".to_string());
+                        return; // Exit early if no files have been loaded
+                    }
+                
+                    // Update flag for checking if filtering has been performed
+                    if self.filter_enabled {
+                        self.filter_performed = true;
+                    }
+                
+                    let sequence_set_result = run_preprocessing(self.filter_enabled, preprocessing);
+                
+                    if let Ok(sequence_set) = sequence_set_result {
+                        // Check if sequences are empty
+                        let mut is_full = true;
+                        is_full &= !sequence_set.is_empty();
+                        is_full &= !sequence_set.iter().any(|sequence| sequence.is_empty());
+                
+                        if is_full {
+                            self.received_sequence_set = Some(sequence_set);
+                        }
+                
+                        // Update logs
+                        self.logs.push("Preprocessing completed successfully.".to_string());
+                    } else {
+                        // Update logs with the error
+                        self.logs.push("Preprocessing failed: Could not get FRET values.".to_string());
+                    }
                 }
             });
 
@@ -154,15 +205,22 @@ impl MainTab {
                         .link(egui::RichText::new("See options").size(12.0))
                         .clicked()
                     {
-                        self.filter_settings_window.open();
+                        self.filter_settings_window.open(&preprocessing);
                     }
                 }
             });
+
+
+            // Add conditional label if filtering has been performed
+            if self.filter_performed {
+                ui.add_space(5.0); // Add spacing before the label
+                ui.label(egui::RichText::new("Filtering has been performed").size(12.0));
+            }
         });
     }
 
     /// Content of the signal analysis panel.
-    fn signal_analysis_panel_content(&mut self, ui: &mut egui::Ui) {
+    fn signal_analysis_panel_content(&mut self, ui: &mut egui::Ui, hmm: &mut HMM) {
         ui.add_space(10.0); // Add padding at the top
         ui.vertical(|ui| {
             ui.add_space(10.0); // Add left padding
@@ -201,7 +259,7 @@ impl MainTab {
                             .clicked()
                         {
                             println!("Got before calling the opening of the window");
-                            self.learn_settings_window.open();
+                            self.learn_settings_window.open(&hmm);
                         }
                     });
                 });
@@ -293,4 +351,21 @@ impl MainTab {
             }
         });
     }
+
+    /// Check if files have been loaded for preprocessing
+    fn has_files_loaded(&self, preprocessing: &SetOfPoints) -> bool {
+        !preprocessing.get_points().is_empty()
+    }
+}
+
+
+
+fn run_preprocessing(filter: bool, preprocess: &mut SetOfPoints) -> Result<Vec<Vec<f64>>, SetOfPointsError> {
+    if filter {
+        preprocess.filter(); // Already includes photobleaching detection
+    }
+    preprocess.get_valid_fret()
+
+    
+  
 }

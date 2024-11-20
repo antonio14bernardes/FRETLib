@@ -11,8 +11,8 @@ pub enum StateValueInitMethod {
     // Add others when they are implemented
 }
 
-impl StateValueInitMethod {
-    pub fn default() -> Self {
+impl Default for StateValueInitMethod {
+    fn default() -> Self {
         StateValueInitMethod::KMeansClustering { 
             max_iters: Some(KMEANS_MAX_ITERS_DEFAULT),
             tolerance: Some(KMEANS_TOLERANCE_DEFAULT),
@@ -20,6 +20,9 @@ impl StateValueInitMethod {
             eval_method: Some(KMEANS_EVAL_METHOD_DEFAULT) 
         }
     }
+}
+
+impl StateValueInitMethod {
 
     pub fn handle_nones(self) -> Self {
         match self {
@@ -163,10 +166,13 @@ pub enum StateNoiseInitMethod {
     Sparse{mult: Option<f64>},
 }
 
-impl StateNoiseInitMethod {
-    pub fn default() -> Self {
+impl Default for StateNoiseInitMethod {
+    fn default() -> Self {
         Self::Sparse { mult: Some(STATE_NOISE_MULT) }
     }
+}
+
+impl StateNoiseInitMethod {
 
     pub fn handle_nones(self) -> Self {
         match self {
@@ -212,10 +218,13 @@ pub enum StartMatrixInitMethod {
     // Add others when they are implemented
 }
 
-impl StartMatrixInitMethod {
-    pub fn default() -> Self  {
+impl Default for StartMatrixInitMethod {
+    fn default() -> Self  {
         StartMatrixInitMethod::Balanced{}
     }
+}
+
+impl StartMatrixInitMethod {
     pub fn get_start_matrix(&self, num_states: usize, dist: bool) -> Result<(StartMatrix, Option<Vec<f64>>), HMMInitializerError> {
         if num_states == 0 {return Err(HMMInitializerError::InvalidNumberOfStates)}
         let start_matrix: StartMatrix;
@@ -247,10 +256,13 @@ pub enum TransitionMatrixInitMethod {
     // Add others when they are implemented
 }
 
-impl TransitionMatrixInitMethod {
-    pub fn default() -> Self {
+impl Default for TransitionMatrixInitMethod {
+    fn default() -> Self {
         TransitionMatrixInitMethod::Balanced
     }
+}
+
+impl TransitionMatrixInitMethod {
     pub fn get_transition_matrix(&self, num_states: usize, dist: bool) -> Result<(TransitionMatrix,Option<Vec<Vec<f64>>>), HMMInitializerError> {
         if num_states == 0 {return Err(HMMInitializerError::InvalidNumberOfStates)}
         let transition_matrix: TransitionMatrix;

@@ -14,8 +14,8 @@ pub struct HMMLearner {
     verbose: bool,
 }
 
-impl HMMLearner {
-    pub fn new_default() -> Self {
+impl Default for HMMLearner {
+    fn default() -> Self {
         Self {
             learner:Box::new(BaumWelchWrapper::new()),
             learner_type: LearnerType::BaumWelch,
@@ -23,6 +23,9 @@ impl HMMLearner {
             verbose: true,
         }
     }
+}
+
+impl HMMLearner {
     pub fn new(learner_type: LearnerType) -> Self {
 
         let learner: Box<dyn HMMLearnerTrait>;
@@ -156,6 +159,10 @@ impl HMMLearnerTrait for HMMLearner {
 
     fn get_setup_data(&self) -> Option<&LearnerSpecificSetup> {
         self.learner.get_setup_data()
+    }
+
+    fn get_learner_type(&self) -> &LearnerType {
+        &self.learner_type
     }
 
     fn get_log_likelihood(&self) -> Option<f64> {
