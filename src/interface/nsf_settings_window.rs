@@ -15,28 +15,33 @@ pub struct FindNumberOfStatesWindow {
     pub input_buffers: HashMap<String, String>, // For numeric input fields
     pub min_max_valid: bool,
     pub set_button_pressed: bool,
+
+    strategy_temp: NumStatesFindStratWrapper,
+    min_k_temp: usize,
+    max_k_temp: usize,
+
 }
 
 impl FindNumberOfStatesWindow {
     pub fn new() -> Self {
         Self {
             is_open: false,
-            strategy: NumStatesFindStratWrapper::KMeansClustering {
-                num_tries: Some(KMEANS_NUM_TRIES_DEFAULT),
-                max_iters: Some(KMEANS_MAX_ITERS_DEFAULT),
-                tolerance: Some(KMEANS_TOLERANCE_DEFAULT),
-                method: Some(KMEANS_EVAL_METHOD_DEFAULT),
-            },
+            strategy: NumStatesFindStratWrapper::default(),
             min_k: MIN_K_DEFAULT,
             max_k: MAX_K_DEFAULT,
             input_buffers: HashMap::new(),
             min_max_valid: true,
             set_button_pressed: false,
+
+            strategy_temp:  NumStatesFindStratWrapper::default(),
+            min_k_temp: MIN_K_DEFAULT,
+            max_k_temp: MAX_K_DEFAULT,
         }
     }
 
     pub fn open(&mut self) {
         self.is_open = true;
+        self.sync_buffers_with_temp();
     }
 
     pub fn show(&mut self, ctx: &egui::Context) {
@@ -55,15 +60,15 @@ impl FindNumberOfStatesWindow {
                             let buffer = self
                                 .input_buffers
                                 .entry("min_k".to_string())
-                                .or_insert_with(|| self.min_k.to_string());
+                                .or_insert_with(|| self.min_k_temp.to_string());
                         
                             let response = ui.add_sized([50.0, 20.0], |ui: &mut egui::Ui| ui.text_edit_singleline(buffer));
                         
                             if response.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                                 if let Ok(parsed) = buffer.parse::<usize>() {
-                                    self.min_k = parsed;
+                                    self.min_k_temp = parsed;
                                 } else {
-                                    *buffer = self.min_k.to_string(); // Reset to previous valid value
+                                    *buffer = self.min_k_temp.to_string(); // Reset to previous valid value
                                 }
                             }
                             
@@ -74,15 +79,15 @@ impl FindNumberOfStatesWindow {
                             let buffer = self
                                 .input_buffers
                                 .entry("max_k".to_string())
-                                .or_insert_with(|| self.max_k.to_string());
+                                .or_insert_with(|| self.max_k_temp.to_string());
                         
                                 let response = ui.add_sized([50.0, 20.0], |ui: &mut egui::Ui| ui.text_edit_singleline(buffer));
                         
                             if response.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                                 if let Ok(parsed) = buffer.parse::<usize>() {
-                                    self.max_k = parsed;
+                                    self.max_k_temp = parsed;
                                 } else {
-                                    *buffer = self.max_k.to_string(); // Reset to previous valid value
+                                    *buffer = self.max_k_temp.to_string(); // Reset to previous valid value
                                 }
                             }
                         });
@@ -93,7 +98,7 @@ impl FindNumberOfStatesWindow {
                         ui.add_space(10.0);
     
                         // Dropdown for selecting the strategy
-                        let current_strategy = self.strategy.to_str().to_string();
+                        let current_strategy = self.strategy_temp.to_str().to_string();
                         ui.horizontal(|ui| {
                             ui.label("Strategy:");
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -103,7 +108,7 @@ impl FindNumberOfStatesWindow {
                                     .show_ui(ui, |ui| {
                                         if ui
                                             .selectable_value(
-                                                &mut self.strategy,
+                                                &mut self.strategy_temp,
                                                 NumStatesFindStratWrapper::KMeansClustering {
                                                     num_tries: Some(KMEANS_NUM_TRIES_DEFAULT),
                                                     max_iters: Some(KMEANS_MAX_ITERS_DEFAULT),
@@ -117,7 +122,7 @@ impl FindNumberOfStatesWindow {
     
                                         if ui
                                             .selectable_value(
-                                                &mut self.strategy,
+                                                &mut self.strategy_temp,
                                                 NumStatesFindStratWrapper::BaumWelch,
                                                 "Baum-Welch",
                                             )
@@ -126,7 +131,7 @@ impl FindNumberOfStatesWindow {
     
                                         if ui
                                             .selectable_value(
-                                                &mut self.strategy,
+                                                &mut self.strategy_temp,
                                                 NumStatesFindStratWrapper::CurrentSetup,
                                                 "Current Setup",
                                             )
@@ -139,7 +144,7 @@ impl FindNumberOfStatesWindow {
                         ui.add_space(10.0);
     
                         // Render strategy-specific settings
-                        match &mut self.strategy {
+                        match &mut self.strategy_temp {
                             NumStatesFindStratWrapper::KMeansClustering {
                                 num_tries,
                                 max_iters,
@@ -236,7 +241,7 @@ impl FindNumberOfStatesWindow {
                                 self.reset();
                             }
                             if ui.button("Close").clicked() {
-                                self.is_open = false;
+                                self.close();
                             }
                         });
                     });
@@ -252,10 +257,18 @@ impl FindNumberOfStatesWindow {
     }
     fn set_function(&mut self) {
         self.set_button_pressed = true;
+
+        self.strategy = self.strategy_temp.clone();
+
+        if self.min_max_valid {
+            self.min_k = self.min_k_temp;
+            self.max_k = self.max_k_temp;
+        }
+    
     }
 
     fn validate_min_max(&mut self) {
-        if self.max_k < self.min_k {
+        if self.max_k_temp < self.min_k_temp {
             self.min_max_valid = false;
         } else {
             self.min_max_valid = true;
@@ -263,10 +276,62 @@ impl FindNumberOfStatesWindow {
     }
 
     fn reset(&mut self) {
-        self.strategy = NumStatesFindStratWrapper::default();
-        self.min_k = MIN_K_DEFAULT;
-        self.max_k = MAX_K_DEFAULT;
+        self.strategy_temp = NumStatesFindStratWrapper::default();
+        self.min_k_temp = MIN_K_DEFAULT;
+        self.max_k_temp = MAX_K_DEFAULT;
         self.input_buffers.clear();
+        self.sync_buffers_with_temp();
+    }
+
+    fn close(&mut self) {
+        self.is_open = false;
+
+        self.strategy_temp = self.strategy.clone();
+        self.min_k_temp = self.min_k;
+        self.max_k_temp = self.max_k;
+    }
+    fn sync_buffers_with_temp(&mut self) {
+        self.input_buffers.clear();
+
+        // Sync min_k and max_k
+        self.input_buffers.insert("min_k".to_string(), self.min_k_temp.to_string());
+        self.input_buffers.insert("max_k".to_string(), self.max_k_temp.to_string());
+
+        // Sync strategy-specific settings
+        match &self.strategy_temp {
+            NumStatesFindStratWrapper::KMeansClustering {
+                num_tries,
+                max_iters,
+                tolerance,
+                method,
+            } => {
+                self.input_buffers.insert(
+                    "num_tries".to_string(),
+                    num_tries.unwrap_or(KMEANS_NUM_TRIES_DEFAULT).to_string(),
+                );
+                self.input_buffers.insert(
+                    "max_iters".to_string(),
+                    max_iters.unwrap_or(KMEANS_MAX_ITERS_DEFAULT).to_string(),
+                );
+                self.input_buffers.insert(
+                    "tolerance".to_string(),
+                    tolerance.unwrap_or(KMEANS_TOLERANCE_DEFAULT).to_string(),
+                );
+                self.input_buffers.insert(
+                    "kmeans_eval_method".to_string(),
+                    method
+                        .as_ref()
+                        .unwrap_or(&KMEANS_EVAL_METHOD_DEFAULT)
+                        .to_string(),
+                );
+            }
+            NumStatesFindStratWrapper::BaumWelch => {
+                // Baum-Welch has no specific settings to sync
+            }
+            NumStatesFindStratWrapper::CurrentSetup => {
+                // Current Setup has no specific settings to sync
+            }
+        }
     }
 }
 

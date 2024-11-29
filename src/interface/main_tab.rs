@@ -1,5 +1,6 @@
 use eframe::egui;
 use crate::signal_analysis::hmm::hmm_struct::HMM;
+use crate::signal_analysis::hmm::LearnerType;
 use crate::trace_selection::set_of_points::{SetOfPoints, SetOfPointsError};
 
 use super::app::Tab;
@@ -8,6 +9,7 @@ use super::init_settings_window::InitializationSettingsWindow;
 use super::learn_settings_window::LearnSettingsWindow;
 use super::load_traces_window::LoadTracesWindow;
 use super::nsf_settings_window::FindNumberOfStatesWindow;
+use super::run_signal_analysis_window::RunSignalProcessingWindow;
 
 pub struct MainTab {
     filter_enabled: bool,
@@ -26,6 +28,9 @@ pub struct MainTab {
 
     // Trace loading window
     load_traces_window: LoadTracesWindow,
+
+    // Signal Analysis run window
+    run_signal_analysis_window: RunSignalProcessingWindow,
 
     // Log messages
     logs: Vec<String>,
@@ -46,6 +51,7 @@ impl Default for MainTab {
             initialize_settings_window: InitializationSettingsWindow::new(),
             nsf_seettings_window: FindNumberOfStatesWindow::new(),
             load_traces_window: LoadTracesWindow::new(),
+            run_signal_analysis_window: RunSignalProcessingWindow::new(),
 
             logs: Vec::new(),
         }
@@ -82,8 +88,11 @@ impl Tab for MainTab {
         // 8. Render the Trace Loading window
         self.load_traces_window.show(ctx, preprocessing);
 
+        // 9. Render the Run Signal Analysis window
+        self.run_signal_analysis_window.show(ctx);
 
-        println!("filter: {:?}", preprocessing.get_filter_setup());
+
+        // println!("filter: {:?}", preprocessing.get_filter_setup());
 
     }
 }
@@ -188,7 +197,7 @@ impl MainTab {
                         self.logs.push("Preprocessing completed successfully.".to_string());
                     } else {
                         // Update logs with the error
-                        self.logs.push("Preprocessing failed: Could not get FRET values.".to_string());
+                        self.logs.push("Preprocessing failed: Could not get valid FRET sequences.".to_string());
                     }
                 }
             });
@@ -227,7 +236,26 @@ impl MainTab {
             ui.horizontal(|ui| {
                 ui.add_space(10.0); // Left padding for the button
                 if ui.button("Run Signal Analysis").clicked() {
-                    // Add signal analysis logic here
+                    if self.received_sequence_set.is_none() {
+                        self.logs.push("Could not un signal analysis, since no valid fret sequences are available.".to_string());
+                        return;
+                    }
+
+                    let sequence_set = self.received_sequence_set.as_ref().unwrap().clone();
+                    let input_hint: HMMInputHint;
+
+                    if self.num_states_find_enabled {
+                        input_hint = HMMInputHint::NumStatesFinder;
+                    } else if self.initialize_enabled {
+                        input_hint = HMMInputHint::Initializer;
+                    } else if self.learn_enabled {
+                        let learner_type = self.learn_settings_window.learner_type.clone();
+                        input_hint = HMMInputHint::Learner { learner_type };
+                    } else {
+                        input_hint = HMMInputHint::Analyzer;
+                    }
+
+                    self.run_signal_analysis_window.open(sequence_set, input_hint);
                 }
             });
 
@@ -365,7 +393,12 @@ fn run_preprocessing(filter: bool, preprocess: &mut SetOfPoints) -> Result<Vec<V
         preprocess.filter(); // Already includes photobleaching detection
     }
     preprocess.get_valid_fret()
+}
 
-    
-  
+#[derive(Clone)]
+pub enum HMMInputHint {
+    Analyzer,
+    Learner{learner_type: LearnerType},
+    Initializer,
+    NumStatesFinder,
 }

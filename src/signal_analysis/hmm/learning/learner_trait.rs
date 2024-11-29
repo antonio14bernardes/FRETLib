@@ -145,7 +145,7 @@ impl LearnerSpecificSetup {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LearnerSpecificInitialValues {
     AmalgamIdea {initial_distributions: Option<(Vec<DVector<f64>>, Vec<DMatrix<f64>>)>},
     BaumWelch {states: Vec<State>, start_matrix: Option<StartMatrix>, transition_matrix: Option<TransitionMatrix>}

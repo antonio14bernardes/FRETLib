@@ -8,7 +8,6 @@ use std::collections::HashMap;
 
 pub struct LearnSettingsWindow {
     pub is_open: bool,
-    is_set: bool,
     pub learner_type: LearnerType,
     pub learner_setup: LearnerSpecificSetup, // Aux to handle the set button
     
@@ -25,7 +24,6 @@ impl LearnSettingsWindow {
         Self {
             
             is_open: false,
-            is_set: false,
             learner_type: learner_type.clone(),
             learner_setup_temp: LearnerSpecificSetup::default(&learner_type),
             input_buffers: HashMap::new(),
@@ -37,17 +35,6 @@ impl LearnSettingsWindow {
 
     pub fn open(&mut self, hmm: &HMM) {
         self.is_open = true;
-
-        // If we have clicked on set on the last opening of the window, keep the values stored then
-        if self.is_set {
-            self.is_set = false;
-            // Sync the buffers with the values in learner_setup
-            self.sync_buffers_with_setup();
-
-            return;
-        }
-        
-
         // Sync the buffers with the values in learner_setup
         self.sync_buffers_with_setup();
     }
@@ -115,7 +102,6 @@ impl LearnSettingsWindow {
                         ui.horizontal(|ui| {
                             if ui.button("Set").clicked() {
                                 println!("Set button clicked (no functionality yet).");
-                                self.is_set = true;
                                 self.learner_setup = self.learner_setup_temp.clone();
                                 self.learner_type = self.learner_type_temp.clone();
                             }
@@ -131,10 +117,9 @@ impl LearnSettingsWindow {
 
                             if ui.button("Close").clicked() {
 
-                                if !self.is_set {
-                                    self.learner_setup_temp = self.learner_setup.clone();
-                                    self.learner_type_temp = self.learner_type.clone()
-                                }
+                                self.learner_setup_temp = self.learner_setup.clone();
+                                self.learner_type_temp = self.learner_type.clone();
+                                
                                 
                                 self.is_open = false;
                                 println!("Learn Settings Window closed");
@@ -144,8 +129,7 @@ impl LearnSettingsWindow {
                 });
         }
     
-        // println!("Learner type: {:?}", self.learner_type);
-        println!("Learner setup {:?}", self.learner_setup);
+        
     }
 
     fn render_amalgam_idea_settings(&mut self, ui: &mut egui::Ui) {
@@ -160,8 +144,8 @@ impl LearnSettingsWindow {
             {
                 (
                     iter_memory.get_or_insert(AMALGAM_ITER_MEMORY_DEFAULT),
-                    dependence_type.get_or_insert(AMALGAM_DEPENDENCY_DEFAULT.clone()),
-                    fitness_type.get_or_insert(AMALGAM_FITNESS_DEFAULT.clone()),
+                    dependence_type.get_or_insert(AMALGAM_DEPENDENCY_DEFAULT),
+                    fitness_type.get_or_insert(AMALGAM_FITNESS_DEFAULT),
                     max_iterations.get_or_insert(AMALGAM_MAX_ITERS_DEFAULT),
                 )
             } else {
