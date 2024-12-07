@@ -23,7 +23,6 @@ pub mod number_states_finder;
 pub mod learning;
 pub mod analysis;
 pub mod hmm_struct;
-pub mod verbosity;
 
 use state::*;
 use hmm_matrices::*; 
@@ -37,7 +36,6 @@ pub use initialization::init_method_structs::{StateValueInitMethod, StateNoiseIn
 pub use learning::{hmm_learner, learner_trait::{LearnerSpecificInitialValues, LearnerType, LearnerSpecificSetup}};
 pub use number_states_finder::hmm_num_states_finder::NumStatesFindStrat;
 pub use hmm_struct::NumStatesFindStratWrapper;
-pub use verbosity::HMMVerbosity;
 
 
 pub use amalgam_integration::amalgam_modes::{AmalgamDependencies, AmalgamFitness};

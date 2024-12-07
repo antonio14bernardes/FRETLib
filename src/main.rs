@@ -40,7 +40,182 @@ use fret_lib::trace_selection::individual_trace::*;
 use eframe::egui;
 use fret_lib::interface::app::*;
 
+pub fn main_single() {
+    // Step 1: Generate synthetic data (single sequence)
+    let real_state1 = State::new(0, 10.0, 1.0).unwrap();
+    let real_state2 = State::new(1, 20.0, 2.0).unwrap();
+    let real_state3 = State::new(2, 30.0, 3.0).unwrap();
 
+    let real_states = vec![real_state1, real_state2, real_state3];
+    let real_start_matrix_raw: Vec<f64> = vec![0.1, 0.8, 0.1];
+    let real_start_matrix = StartMatrix::new(real_start_matrix_raw);
+
+    let real_transition_matrix_raw: Vec<Vec<f64>> = vec![
+        vec![0.3, 0.45, 0.25],
+        vec![0.3, 0.2, 0.5],
+        vec![0.4, 0.45, 0.15],
+    ];
+    let real_transition_matrix = TransitionMatrix::new(real_transition_matrix_raw);
+
+    let (_, sequence_values) = HMMInstance::gen_sequence(
+        &real_states,
+        &real_start_matrix,
+        &real_transition_matrix,
+        100, // Sequence length
+    );
+
+    println!("Generated a single sequence with length: {}", sequence_values.len());
+
+    // Step 2: Set initial parameters
+    let initial_states = vec![
+        State::new(0, 11.0, 1.1).unwrap(),
+        State::new(1, 19.0, 2.1).unwrap(),
+        State::new(2, 105.0, 2.9).unwrap(), // Notice the intentionally incorrect value
+    ];
+
+    let initial_start_matrix = StartMatrix::new(vec![0.33, 0.33, 0.34]);
+    let initial_transition_matrix = TransitionMatrix::new(vec![
+        vec![0.3, 0.3, 0.4],
+        vec![0.2, 0.5, 0.3],
+        vec![0.4, 0.2, 0.4],
+    ]);
+
+    let termination_criterion = TerminationCriterium::PlateauConvergence {
+        epsilon: 1e-4,
+        plateau_len: 20,
+        max_iterations: Some(500),
+    };
+
+    // Step 3: Run Baum-Welch for a single sequence
+    println!("Running Baum-Welch algorithm on a single sequence...");
+    let mut baum = BaumWelch::new(initial_states.len() as u16);
+
+    let mut rng = thread_rng();
+    set_initial_states_with_jitter_baum(&mut baum, &initial_states, &mut rng, 1000).unwrap();
+    baum.set_initial_start_matrix(initial_start_matrix.clone()).unwrap();
+    baum.set_initial_transition_matrix(initial_transition_matrix.clone()).unwrap();
+    baum.set_state_collapse_handle(StateCollapseHandle::Ignore);
+
+    // Run Baum-Welch optimization
+    let result = baum.run_optimization(&sequence_values, termination_criterion);
+
+    // Step 4: Display Results
+    match result {
+        Ok(_) => {
+            println!("Baum-Welch completed successfully!");
+            let log_likelihood = baum.get_log_likelihood().unwrap();
+            let states = baum.get_states().unwrap();
+            let start_matrix = baum.get_start_matrix().unwrap();
+            let transition_matrix = baum.get_transition_matrix().unwrap();
+
+            println!("Final Log-Likelihood: {:.6}", log_likelihood);
+            println!("\nLearned States:");
+            for state in states {
+                println!(
+                    "State {}: Value = {:.6}, Noise Std = {:.6}",
+                    state.id,
+                    state.get_value(),
+                    state.get_noise_std()
+                );
+            }
+            println!("\nLearned Start Matrix: {:?}", start_matrix.matrix);
+            println!("\nLearned Transition Matrix:");
+            for row in transition_matrix.matrix.raw_matrix.iter() {
+                println!("{:?}", row);
+            }
+        }
+        Err(err) => {
+            eprintln!("Baum-Welch encountered an error: {:?}", err);
+        }
+    }
+}
+
+pub fn main_baum_seq_set() {
+    // Step 1: Generate synthetic data
+    let real_state1 = State::new(0, 10.0, 1.0).unwrap();
+    let real_state2 = State::new(1, 20.0, 2.0).unwrap();
+    let real_state3 = State::new(2, 30.0, 3.0).unwrap();
+
+    let real_states = vec![real_state1, real_state2, real_state3];
+    let num_states = real_states.len();
+
+    let real_start_matrix_raw: Vec<f64> = vec![0.1, 0.8, 0.1];
+    let real_start_matrix = StartMatrix::new(real_start_matrix_raw);
+
+    let real_transition_matrix_raw: Vec<Vec<f64>> = vec![
+        vec![0.3, 0.45, 0.25],
+        vec![0.3, 0.2, 0.5],
+        vec![0.4, 0.45, 0.15],
+    ];
+    let real_transition_matrix = TransitionMatrix::new(real_transition_matrix_raw);
+
+    let mut sequence_set: Vec<Vec<f64>> = Vec::new();
+    let num_sequences = 10;
+    for _ in 0..num_sequences {
+        let (_, sequence_values) = HMMInstance::gen_sequence(
+            &real_states,
+            &real_start_matrix,
+            &real_transition_matrix,
+            100,
+        );
+        sequence_set.push(sequence_values);
+    }
+
+    // Step 2: Set initial parameters
+    let initial_states = vec![
+        State::new(0, 11.0, 1.1).unwrap(),
+        State::new(1, 19.0, 2.1).unwrap(),
+        State::new(2, 100.0, 2.9).unwrap(),
+    ];
+
+    let initial_start_matrix = StartMatrix::new(vec![0.33, 0.33, 0.34]);
+    let initial_transition_matrix = TransitionMatrix::new(vec![
+        vec![0.3, 0.3, 0.4],
+        vec![0.2, 0.5, 0.3],
+        vec![0.4, 0.2, 0.4],
+    ]);
+
+    let termination_criterion = TerminationCriterium::PlateauConvergence {
+        epsilon: 1e-4,
+        plateau_len: 20,
+        max_iterations: Some(500),
+    };
+
+    // Step 3: Run Baum-Welch
+    println!("Running Baum-Welch algorithm...");
+    let result = run_baum_welch_on_sequence_set(
+        &sequence_set,
+        initial_states,
+        &initial_start_matrix,
+        &initial_transition_matrix,
+        &termination_criterion,
+    );
+
+    // Step 4: Display Results
+    match result {
+        Ok((log_likelihood, states, start_matrix, transition_matrix)) => {
+            println!("Baum-Welch completed successfully!");
+            println!("Final Log-Likelihood: {:.6}", log_likelihood);
+            println!("\nLearned States:");
+            for state in states {
+                println!(
+                    "State {}: Value = {:.6}, Noise Std = {:.6}",
+                    state.id,
+                    state.get_value(),
+                    state.get_noise_std()
+                );
+            }
+            println!("\nLearned Start Matrix: {:?}", start_matrix.matrix);
+            println!("\nLearned Transition Matrix:");
+            for row in transition_matrix.matrix.raw_matrix.iter() {
+                println!("{:?}", row);
+            }
+        }
+        Err(err) => {
+            eprintln!("Baum-Welch encountered an error: {:?}", err);
+        }
+    }
+}
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
@@ -48,9 +223,7 @@ fn main() -> Result<(), eframe::Error> {
         "FRET Analysis GUI",
         options,
         Box::new(|_cc| Box::new(MyApp::default())),
-    )
-
-    
+    )  
 }
 
 
