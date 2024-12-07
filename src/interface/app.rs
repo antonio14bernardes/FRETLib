@@ -88,10 +88,8 @@ impl eframe::App for MyApp {
             TabType::Main => {
                 let tab_output_option = self.main_tab.render(ctx, &mut self.hmm, &mut self.preprocessing);
 
-                if let Some(tab_output) = tab_output_option {
-                    if let TabOutput::Main { hmm_input } = tab_output {
-                        self.hmm.run(hmm_input).unwrap();
-                    }
+                if let Some(TabOutput::Main { hmm_input }) = tab_output_option {
+                    self.hmm.run(hmm_input).unwrap();
                 }
             }
             TabType::Other => {

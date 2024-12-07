@@ -139,12 +139,14 @@ impl BaumWelch {
             if normalization_factor < epsilon {
                 state_collapse = true;
                 collapsed_states.push(state_from.get_id());
+
+                for state_to in states {
+                    transition_matrix[(state_from, state_to)] = 1.0 / states.len() as f64;
+                }
             } else {
                 for state_to in states {
                     // Sum over all time steps (still unnormalized), and assign to running transition matrix
                     transition_matrix[(state_from, state_to)] = xis[(state_from, state_to)].iter().sum();
-
-                    
 
                     // Normalize
                     transition_matrix[(state_from, state_to)] /= normalization_factor;
@@ -153,7 +155,7 @@ impl BaumWelch {
         }
 
         if state_collapse {
-            return Err(BaumWelchError::CollapsedStates { states: collapsed_states });
+            return Err(BaumWelchError::CollapsedStates { states: collapsed_states, log_likelihood: None });
         }
 
 
@@ -184,6 +186,9 @@ impl BaumWelch {
             if per_state_collection[state.id].len() <= 1 {
                 state_collapse = true;
                 collapsed_states.push(state.get_id());
+
+                // Maintain state value but set the noise_std to a small value
+                state.noise_std = 1e-5;
             } else {
                 
                 let state_observations = &per_state_collection[state.get_id()];
@@ -204,7 +209,7 @@ impl BaumWelch {
         }
 
         if state_collapse {
-            return Err(BaumWelchError::CollapsedStates { states: collapsed_states });
+            return Err(BaumWelchError::CollapsedStates { states: collapsed_states, log_likelihood: None });
         }
 
         Ok(())
@@ -250,15 +255,15 @@ impl BaumWelch {
 
         let mut collapsed_states: HashSet<usize> = HashSet::new();
 
-        if let Err(BaumWelchError::CollapsedStates { states }) = update_tr_mat_err {
+        if let Err(BaumWelchError::CollapsedStates { states, .. }) = update_tr_mat_err {
             collapsed_states.extend(states);
         }
 
-        if let Err(BaumWelchError::CollapsedStates { states }) = update_states_err {
+        if let Err(BaumWelchError::CollapsedStates { states, .. }) = update_states_err {
             collapsed_states.extend(states);
         }
 
-        if collapsed_states.len() != 0 {return Err(BaumWelchError::CollapsedStates { states: collapsed_states.into_iter().collect() })}
+        if collapsed_states.len() != 0 {return Err(BaumWelchError::CollapsedStates { states: collapsed_states.into_iter().collect(), log_likelihood: Some(log_likelihood) })}
 
         Ok(log_likelihood)
     }
@@ -274,9 +279,7 @@ impl BaumWelch {
 
         let (mut running_states, mut running_start_matrix, mut running_transition_matrix) =
         setup_baum_welch(&self, observations, InitMode::GivenInits);
-        
         loop {
-            
             let new_output = Self::run_step(
                 &mut running_states,
                 &mut running_start_matrix,
@@ -289,14 +292,15 @@ impl BaumWelch {
                     if tracker.step(new_eval) {break}
                 },
 
-                Err(BaumWelchError::CollapsedStates { states }) => {
+                Err(BaumWelchError::CollapsedStates { states, log_likelihood }) => {
 
                     match self.state_collapse_handle {
                         StateCollapseHandle::Abort => {
-                            return Err(BaumWelchError::CollapsedStates { states: states })
+                            return Err(BaumWelchError::CollapsedStates { states, log_likelihood })
                         },
 
                         StateCollapseHandle::RestartRandom{..} => {
+                            
                             tracker.reset();
 
                             setup_with_random(
@@ -306,6 +310,8 @@ impl BaumWelch {
                                 &mut running_transition_matrix
                             );
 
+                            
+
                         },
 
                         StateCollapseHandle::RemoveCollapsedState => {
@@ -314,6 +320,16 @@ impl BaumWelch {
                             running_start_matrix.remove_states(&states);
                             running_transition_matrix.remove_states(&states);
                         },
+
+                        StateCollapseHandle::Ignore => {
+                            if let Some(new_eval) = log_likelihood {
+                                self.final_log_likelihood = Some(new_eval);
+                                if tracker.step(new_eval) {break}
+                            } else {
+                                return Err(BaumWelchError::CouldntIgnoreCollapsedState)
+                            }
+                            
+                        }
                     }
 
                 },
@@ -480,7 +496,8 @@ pub enum BaumWelchError {
     HMMObservationProbNotFound,
 
     // State collapse
-    CollapsedStates {states: Vec<usize>},
+    CollapsedStates {states: Vec<usize>, log_likelihood: Option<f64>},
+    CouldntIgnoreCollapsedState,
 }
 
 pub enum InitMode {
@@ -553,8 +570,10 @@ pub fn run_baum_welch_on_sequence_set(
     let mut avg_state_noise: Vec<f64> = vec![0.0; num_states];
     let mut avg_start_matrix: Vec<f64> = vec![0.0; num_states];
     let mut avg_transition_matrix: Vec<Vec<f64>> = vec![vec![0.0; num_states]; num_states];
-
+    let mut i = 0;
     for sequence_values in sequence_set {
+        i += 1;
+        println!("iter {}", i);
         // Setup the Baum-Welch algorithm
         let mut baum = BaumWelch::new(num_states as u16);
 
@@ -562,10 +581,9 @@ pub fn run_baum_welch_on_sequence_set(
         set_initial_states_with_jitter_baum(&mut baum, &initial_states, &mut rng, 1000).unwrap();
         baum.set_initial_start_matrix(initial_start_matrix.clone()).unwrap();
         baum.set_initial_transition_matrix(initial_transition_matrix.clone()).unwrap();
-        baum.set_state_collapse_handle(StateCollapseHandle::Abort);
+        baum.set_state_collapse_handle(StateCollapseHandle::Ignore);
 
         let output_res = baum.run_optimization(&sequence_values, termination_criterion.clone());
-
         let log_likelihood: f64;
         let states: Option<Vec<State>>;
         let start_matrix: Option<StartMatrix>;
@@ -579,6 +597,8 @@ pub fn run_baum_welch_on_sequence_set(
             start_matrix = Some(baum.take_start_matrix().unwrap());
             transition_matrix = Some(baum.take_transition_matrix().unwrap());
         }
+
+        println!("States: {:?}", states);
 
         // Update weighted averages based on the sequence length
         let current_sequence_len = sequence_values.len();

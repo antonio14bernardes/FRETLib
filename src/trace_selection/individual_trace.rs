@@ -179,8 +179,8 @@ impl IndividualTrace {
         if in_run && (self.values.len() - curr_run_start >= min_len) {
             lifetimes_vec.push([curr_run_start, self.values.len()]);
         }
-
         lifetimes_vec
+
     }
 
 }
