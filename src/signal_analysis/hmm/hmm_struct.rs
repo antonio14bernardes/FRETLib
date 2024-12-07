@@ -186,8 +186,11 @@ impl HMM {
         // If input is compatible:
         if let HMMInput::Initializer { num_states, sequence_set }= input {
             // Run Initializer
-            let init_output = initializer.get_intial_values(&sequence_set, num_states)
-            .map_err(|err| HMMError::InitializerError { err })?;
+            let init_output_res = initializer.get_intial_values(&sequence_set, num_states);
+            println!("GOt init output res: {:?}", init_output_res);
+            let init_output = init_output_res.map_err(|err| HMMError::InitializerError { err })?;
+
+            
 
             Ok((init_output, num_states, sequence_set))
 
@@ -281,6 +284,8 @@ impl HMM {
             self.run_initializer(current_input)?;
 
             current_input = HMMInput::Learner { num_states, sequence_set, learner_init };
+
+            println!("Got input");
 
         }
         if self.learner.is_some() {

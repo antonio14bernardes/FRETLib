@@ -1,4 +1,5 @@
 use eframe::egui;
+use crate::signal_analysis::hmm::hmm_struct::HMMInput;
 use crate::signal_analysis::hmm::hmm_struct::HMM;
 use crate::trace_selection::set_of_points::SetOfPoints;
 
@@ -11,8 +12,12 @@ enum TabType {
     Other,
 }
 
+pub enum TabOutput {
+    Main {hmm_input: HMMInput}
+}
+
 pub trait Tab {
-    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints);
+    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints) -> Option<TabOutput>;
 }
 
 pub struct MyApp {
@@ -33,7 +38,7 @@ impl Default for MyApp {
             hmm: HMM::new(),
             preprocessing: SetOfPoints::new(),
 
-            // GUI styff
+            // GUI stuff
             current_tab: TabType::Main,
             main_tab: MainTab::default(),
             other_tab: OtherTab::default(),
@@ -80,8 +85,18 @@ impl eframe::App for MyApp {
 
         // Show the content of the current tab
         match self.current_tab {
-            TabType::Main => self.main_tab.render(ctx, &mut self.hmm, &mut self.preprocessing),
-            TabType::Other => self.other_tab.render(ctx, &mut self.hmm, &mut self.preprocessing),
+            TabType::Main => {
+                let tab_output_option = self.main_tab.render(ctx, &mut self.hmm, &mut self.preprocessing);
+
+                if let Some(tab_output) = tab_output_option {
+                    if let TabOutput::Main { hmm_input } = tab_output {
+                        self.hmm.run(hmm_input).unwrap();
+                    }
+                }
+            }
+            TabType::Other => {
+                let _ = self.other_tab.render(ctx, &mut self.hmm, &mut self.preprocessing);
+            }
         }
     }
 }

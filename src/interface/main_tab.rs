@@ -1,9 +1,9 @@
 use eframe::egui;
 use crate::signal_analysis::hmm::hmm_struct::HMM;
-use crate::signal_analysis::hmm::LearnerType;
+use crate::signal_analysis::hmm::{InitializationMethods, LearnerType};
 use crate::trace_selection::set_of_points::{SetOfPoints, SetOfPointsError};
 
-use super::app::Tab;
+use super::app::{Tab, TabOutput};
 use super::filter_settings_window::FilterSettingsWindow;
 use super::init_settings_window::InitializationSettingsWindow;
 use super::learn_settings_window::LearnSettingsWindow;
@@ -61,7 +61,7 @@ impl Default for MainTab {
 
 
 impl Tab for MainTab {
-    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints) {
+    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints) -> Option<TabOutput>{
         // The global styles are now applied in MyApp, so we don't need to call apply_global_styles here.
 
         // 1. Top Panel: Load Traces Button
@@ -89,9 +89,47 @@ impl Tab for MainTab {
         self.load_traces_window.show(ctx, preprocessing);
 
         // 9. Render the Run Signal Analysis window
-        self.run_signal_analysis_window.show(ctx);
+        let hmm_input_ready = self.run_signal_analysis_window.show(ctx);
+
+        if let Some(hmm_input) = hmm_input_ready {
+            println!("Received input: {:?}", hmm_input);
+
+            self.setup_hmm(hmm);
+
+            println!("Setup hmm: {:?}", hmm);
+
+            return Some(TabOutput::Main { hmm_input })
+        }
+
+        return None;
 
 
+
+        // println!("Showing current HMM setup\n");
+        // println!("Learner:");
+        // println!("Active?: {}", self.learn_enabled);
+        // if self.learn_enabled {
+        //     println!("Learner type: {:?}", self.learn_settings_window.learner_type);
+        //     println!("Learner setup: {:?}", self.learn_settings_window.learner_setup);
+        // }
+        // println!("\n");
+        // println!("Initializer:");
+        // println!("Active?: {}", self.initialize_enabled);
+        // if self.initialize_enabled {
+        //     println!("Initializer setup:");
+        //     println!("-    Values init:       {:?}",  self.initialize_settings_window.state_value_init);
+        //     println!("-    Noise init:        {:?}",  self.initialize_settings_window.state_noise_init);
+        //     println!("-    Start matrix init: {:?}",  self.initialize_settings_window.start_matrix_init);
+        //     println!("-    Trans matrix init: {:?}",  self.initialize_settings_window.transition_matrix_init);
+        // }
+        // println!("\n");
+        // println!("Num States Finder:");
+        // println!("Active?: {}", self.num_states_find_enabled);
+        // if self.num_states_find_enabled {
+        //     println!("Strategy: {:?}", self.nsf_seettings_window.strategy);
+        // }
+        
+        
         // println!("filter: {:?}", preprocessing.get_filter_setup());
 
     }
@@ -383,6 +421,52 @@ impl MainTab {
     /// Check if files have been loaded for preprocessing
     fn has_files_loaded(&self, preprocessing: &SetOfPoints) -> bool {
         !preprocessing.get_points().is_empty()
+    }
+
+    /// Build the HMM
+    fn setup_hmm(&self, hmm: &mut HMM) {
+        
+        // Check if learner is enabled and get its setup
+        if self.learn_enabled {
+            // Retrieve stuff from the learner settings window
+            let learner_type = self.learn_settings_window.learner_type.clone();
+            let learner_setup = self.learn_settings_window.learner_setup.clone();
+
+            // Set the retrieved stuff in the hmm object
+            hmm.add_learner();
+            hmm.set_learner_type(learner_type).unwrap();
+            hmm.setup_learner(learner_setup).unwrap();
+        }
+
+
+        // Check if initializer is enabled and get its setup
+        if self.initialize_enabled {
+            // Retrieve relevant stuff
+            let state_values_init = self.initialize_settings_window.state_value_init.clone();
+            let state_noise_init = self.initialize_settings_window.state_noise_init.clone();
+            let start_matrix_init = self.initialize_settings_window.start_matrix_init.clone();
+            let transition_matrix_init = self.initialize_settings_window.transition_matrix_init.clone();
+
+            let init_methods = InitializationMethods {
+                state_values_method: Some(state_values_init),
+                state_noises_method: Some(state_noise_init),
+                start_matrix_method: Some(start_matrix_init),
+                transition_matrix_method: Some(transition_matrix_init),
+            };
+
+            hmm.add_initializer().unwrap();
+            hmm.set_initialization_method(init_methods).unwrap();
+        }
+
+
+        // Check if num states finder is enabled and get its setup
+        if self.num_states_find_enabled {
+            // Retrieve relevant stuff
+            let strategy = self.nsf_seettings_window.strategy.clone();
+
+            hmm.add_number_of_states_finder().unwrap();
+            hmm.set_state_number_finder_strategy(strategy).unwrap();
+        }
     }
 }
 

@@ -49,7 +49,7 @@ impl RunSignalProcessingWindow {
             run_has_been_pressed: false,
             state_values_valid: false,
             state_noises_valid: false,
-            states_empty: true,
+            states_empty: false,
             start_matrix_valid: false,
             transition_matrix_valid: false,
         }
@@ -61,8 +61,8 @@ impl RunSignalProcessingWindow {
         self.sequence_set = Some(sequence_set);
     }
 
-    pub fn show(&mut self, ctx: &egui::Context) {
-        if !self.is_open {return;}
+    pub fn show(&mut self, ctx: &egui::Context) -> Option<HMMInput>{
+        if !self.is_open {return None;}
 
         egui::Window::new("Run Signal Processing")
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -91,13 +91,18 @@ impl RunSignalProcessingWindow {
                         if ui.button("Run").clicked() {
                             self.run_has_been_pressed = true;
 
-                            if !(self.state_values_valid && 
-                                self.state_noises_valid && 
-                                self.start_matrix_valid && 
-                                self.transition_matrix_valid) ||
-                                self.states_empty {
+                            // if !(self.state_values_valid && 
+                            //     self.state_noises_valid && 
+                            //     self.start_matrix_valid && 
+                            //     self.transition_matrix_valid) ||
+                            //     self.states_empty {
                                 
 
+                            //     // Get outta here and don't construct input nor HMM process
+                            //     return;
+                            // }
+
+                            if !self.check_overall_validity() {
                                 // Get outta here and don't construct input nor HMM process
                                 return;
                             }
@@ -105,7 +110,7 @@ impl RunSignalProcessingWindow {
                             // If checks have been passed, construct the input and HMM process
                             self.construct_hmm_input();
                             if self.hmm_input.is_some() {
-                                println!("HMM Input constructed: {:?}", self.hmm_input);
+                                // println!("HMM Input constructed: {:?}", self.hmm_input);
                                 self.is_open = false;
                             }
                         }
@@ -115,8 +120,8 @@ impl RunSignalProcessingWindow {
                             self.run_has_been_pressed = false;
 
                             // Clean the state values, noises, and hmm matrices vecs
-                            self.state_values = Vec::new();
-                            self.state_noises = Vec::new();
+                            self.state_values = vec![0.2, 0.8];
+                            self.state_noises = vec![0.1, 0.1];
                             self.start_matrix = Vec::new();
                             self.transition_matrix = Vec::new();
                         }
@@ -124,8 +129,20 @@ impl RunSignalProcessingWindow {
                 });
             });
         
-        println!("Start matrix: {:?}", self.start_matrix);
-        println!("Start matrix valid: {}", self.start_matrix_valid);
+        // println!("Num States {:?}", self.num_states); 
+        // println!("States empty {}", self.states_empty);  
+        // println!("State values: {:?}", self.state_values);
+        // println!("State values valid: {}", self.state_values_valid);
+        // println!("State noises: {:?}", self.state_noises);
+        // println!("State noises valid: {:?}", self.state_noises_valid);
+        // println!("Start matrix: {:?}", self.start_matrix);
+        // println!("Start matrix valid: {}", self.start_matrix_valid);
+        // println!("Transition matrix: {:?}", self.transition_matrix);
+        // println!("Transition matrix valid: {}", self.transition_matrix_valid);
+
+
+        // Return Option of HMMInput. If Some(input), then the HMM is ready to go, otherwise not yet.
+        self.hmm_input.take()
         
     }
 
@@ -142,6 +159,15 @@ impl RunSignalProcessingWindow {
             self.num_states.get_or_insert(1),
             &mut self.input_buffers,
         );
+
+        // Validate and correct the number of states. They cant be 0
+        if let Some(num_states) = &mut self.num_states {
+            if *num_states == 0 {
+                *num_states = 1; // Correct the value if 0. Put it back to 1
+                self.input_buffers
+                    .insert("num_states".to_string(), "1".to_string()); // Update the buffer
+            }
+        }
     }
 
     
@@ -152,7 +178,22 @@ impl RunSignalProcessingWindow {
             self.render_states(ui); // Delegate the state rendering to `render_states`
             self.show_states_error_messages(ui);
         } else {
-            ui.label("No additional configuration required for this learner type.");
+            render_numeric_input_with_layout(
+                ui,
+                "Number of States:",
+                "num_states",
+                self.num_states.get_or_insert(1),
+                &mut self.input_buffers,
+            );
+    
+            // Validate and correct the number of states. They cant be 0
+            if let Some(num_states) = &mut self.num_states {
+                if *num_states == 0 {
+                    *num_states = 1; // Correct the value if 0. Put it back to 1
+                    self.input_buffers
+                        .insert("num_states".to_string(), "1".to_string()); // Update the buffer
+                }
+            }
         }
     }
 
@@ -502,14 +543,14 @@ impl RunSignalProcessingWindow {
 
         // Check for correct number of rows and columns
         self.transition_matrix_valid &= self.transition_matrix.len() == self.state_values.len();
-        if !self.transition_matrix_valid {
-            println!("Failed on row count");
-        }
+        // if !self.transition_matrix_valid {
+        //     println!("Failed on row count");
+        // }
         let prev = self.transition_matrix_valid;
         self.transition_matrix.iter().for_each(|row| self.transition_matrix_valid &= row.len() == self.state_values.len());
-        if !self.transition_matrix_valid && prev {
-            println!("Failed on column count");
-        }
+        // if !self.transition_matrix_valid && prev {
+        //     println!("Failed on column count");
+        // }
 
         let prev = self.transition_matrix_valid;
         // Check for correct values
@@ -518,17 +559,17 @@ impl RunSignalProcessingWindow {
                 self.transition_matrix_valid &= *value >= 0.0 && *value <= 1.0;
             }
         }
-        if !self.transition_matrix_valid && prev {
-            println!("Failed on limits");
-        }
+        // if !self.transition_matrix_valid && prev {
+        //     println!("Failed on limits");
+        // }
 
         let prev = self.transition_matrix_valid;
         for row in &self.transition_matrix {
             self.transition_matrix_valid &= row.iter().sum::<f64>() == 1.0;
         }
-        if !self.transition_matrix_valid && prev {
-            println!("Failed on sum");
-        }
+        // if !self.transition_matrix_valid && prev {
+        //     println!("Failed on sum");
+        // }
     }
 
 
@@ -601,29 +642,72 @@ impl RunSignalProcessingWindow {
         }
     }
 
+    fn check_overall_validity(&self) -> bool {
+        match &self.hmm_input_hint {
+            Some(HMMInputHint::NumStatesFinder) => true,
+            Some(HMMInputHint::Initializer) => {
+                let check = self.num_states.map(|value| value > 0);
+                // println!("Check: {:?}", check);
+                check.unwrap_or(false)
+            }
+            Some(HMMInputHint::Learner { learner_type }) => {
+                match learner_type {
+                    LearnerType::AmalgamIdea => true,
+                    LearnerType::BaumWelch => self.state_values_valid && self.state_noises_valid && !self.states_empty,
+                }
+            }
+            Some(HMMInputHint::Analyzer) => {
+                !self.states_empty &&
+                self.state_values_valid &&
+                self.state_noises_valid &&
+                self.start_matrix_valid &&
+                self.transition_matrix_valid
+            },
+
+            None => false,
+
+        }
+    }
+
     fn construct_hmm_input(&mut self) {
         self.hmm_input = match &self.hmm_input_hint {
             Some(HMMInputHint::NumStatesFinder) => Some(HMMInput::NumStatesFinder {
                 sequence_set: self.sequence_set.as_ref().unwrap().clone(),
             }),
             Some(HMMInputHint::Initializer) => Some(HMMInput::Initializer {
-                num_states: self.num_states.unwrap_or(3),
+                num_states: self.num_states.expect("How the hell did we get here without setting the number of states?"),
                 sequence_set: self.sequence_set.as_ref().unwrap().clone(),
             }),
-            Some(HMMInputHint::Learner { learner_type }) => Some(HMMInput::Learner {
-                num_states: self.num_states.unwrap_or(3),
-                sequence_set: self.sequence_set.as_ref().unwrap().clone(),
-                learner_init: match learner_type {
-                    LearnerType::AmalgamIdea => LearnerSpecificInitialValues::AmalgamIdea {
-                        initial_distributions: None,
-                    },
-                    LearnerType::BaumWelch => LearnerSpecificInitialValues::BaumWelch {
-                        states: HMMInstance::generate_state_set(&self.state_values, &self.state_noises).unwrap(),
-                        start_matrix: Some(StartMatrix::new(self.start_matrix.clone())),
-                        transition_matrix: Some(TransitionMatrix::new(self.transition_matrix.clone())),
-                    },
-                },
-            }),
+            Some(HMMInputHint::Learner { learner_type }) => {
+                let sequence_set = self.sequence_set.as_ref().unwrap().clone();
+                let num_states: usize;
+                let learner_init: LearnerSpecificInitialValues;
+
+                match learner_type {
+                    LearnerType::AmalgamIdea => {
+                        num_states = self.num_states.expect("How the hell did we get here without setting the number of states?");
+                        learner_init = LearnerSpecificInitialValues::AmalgamIdea {
+                            initial_distributions: None,
+                        };
+                    }
+                    LearnerType::BaumWelch => {
+                        num_states = self.state_values.len();
+                        learner_init = LearnerSpecificInitialValues::BaumWelch {
+                            states: HMMInstance::generate_state_set(&self.state_values, &self.state_noises).unwrap(),
+                            start_matrix: Some(StartMatrix::new(self.start_matrix.clone())),
+                            transition_matrix: Some(TransitionMatrix::new(self.transition_matrix.clone())),
+                        };
+                    }
+                }
+
+                Some(HMMInput::Learner {
+                    num_states,
+                    sequence_set,
+                    learner_init,
+                })
+
+            }
+            
             Some(HMMInputHint::Analyzer) => Some(HMMInput::Analyzer {
                 sequence_set: self.sequence_set.as_ref().unwrap().clone(),
                 states: HMMInstance::generate_state_set(&self.state_values, &self.state_noises).unwrap(),

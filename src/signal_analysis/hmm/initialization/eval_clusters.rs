@@ -80,6 +80,7 @@ pub fn silhouette_score_1_d(cluster_means: &Vec<f64>, assignments: &Vec<usize>, 
     let mut distances = HashMap::<UnorderedPair, f64>::new();
     for (cluster1_id, cluster1_values) in divided_clusters.iter().enumerate() {
         for (cluster2_id, cluster2_values) in divided_clusters.iter().enumerate() {
+            println!("Running cluster {} and cluster {}", cluster1_id, cluster2_id);
             for (value1_id, value1) in cluster1_values.iter().enumerate() {
                 for (value2_id, value2) in cluster2_values.iter().enumerate() {
                     if cluster1_id == cluster2_id && value1_id == value2_id {continue}

@@ -121,7 +121,6 @@ impl HMMInitializer {
         // Get state values.
         let (state_values, state_noise_from_values) = self.state_values_method.get_state_values(num_states, sequence_set, model_dist)?;
         
-        
         // If the state values also provides noise, use this instead of the one obtained form the StateNoiseInitMethod struct
         let state_noise: Vec<f64>;
         let mut state_noise_std: Option<Vec<f64>> = None;
@@ -165,6 +164,7 @@ impl HMMInitializer {
         let initial_values =
         build_learner_setup_enum(&self.learner_setup, state_values, state_noise, state_noise_std, 
             start_matrix, start_matrix_cov_diag, transition_matrix, transition_matrix_cov_diags);
+
 
         if self.verbose {self.finish_initialization_yap();} // Print some more stuff
 
