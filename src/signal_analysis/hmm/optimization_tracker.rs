@@ -160,4 +160,5 @@ pub enum StateCollapseHandle {
     Abort, // Abort optimization if state collapses 
     RestartRandom {allowed_trials: u8}, // Restart optimizatiom with new random states
     RemoveCollapsedState, // Continue optimization, discarding the collapsed state
+    Ignore,
 }
