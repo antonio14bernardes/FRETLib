@@ -4,12 +4,12 @@ use crate::signal_analysis::hmm::hmm_struct::HMM;
 use crate::trace_selection::set_of_points::SetOfPoints;
 
 use super::main_tab::*;
-use super::other_tab::*;
+use super::traces_tab::*;
 
 #[derive(PartialEq)]
 enum TabType {
     Main,
-    Other,
+    Traces,
 }
 
 pub enum TabOutput {
@@ -17,7 +17,7 @@ pub enum TabOutput {
 }
 
 pub trait Tab {
-    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints) -> Option<TabOutput>;
+    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints, logs: &mut Vec<String>) -> Option<TabOutput>;
 }
 
 pub struct MyApp {
@@ -28,7 +28,9 @@ pub struct MyApp {
     // GUI stuff
     current_tab: TabType,
     main_tab: MainTab,
-    other_tab: OtherTab,
+    traces_tab: TracesTab,
+
+    logs: Vec<String>,
 }
 
 impl Default for MyApp {
@@ -41,7 +43,9 @@ impl Default for MyApp {
             // GUI stuff
             current_tab: TabType::Main,
             main_tab: MainTab::default(),
-            other_tab: OtherTab::default(),
+            traces_tab: TracesTab::default(),
+
+            logs: Vec::new(),
         }
     }
 }
@@ -75,25 +79,30 @@ impl eframe::App for MyApp {
         // Apply global styles here
         self.apply_global_styles(ctx);
 
+        // Check if points are loaded to conditionally show the "Raw Analysis" tab
+        let raw_analysis_available = !self.preprocessing.get_points().is_empty();
+
         // Draw the tab bar at the top
         egui::TopBottomPanel::top("tab_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.current_tab, TabType::Main, "Main");
-                ui.selectable_value(&mut self.current_tab, TabType::Other, "Other");
+                if raw_analysis_available {
+                    ui.selectable_value(&mut self.current_tab, TabType::Traces, "Raw Analysis");
+                }
             });
         });
 
         // Show the content of the current tab
         match self.current_tab {
             TabType::Main => {
-                let tab_output_option = self.main_tab.render(ctx, &mut self.hmm, &mut self.preprocessing);
+                let tab_output_option = self.main_tab.render(ctx, &mut self.hmm, &mut self.preprocessing, &mut self.logs);
 
                 if let Some(TabOutput::Main { hmm_input }) = tab_output_option {
                     self.hmm.run(hmm_input).unwrap();
                 }
             }
-            TabType::Other => {
-                let _ = self.other_tab.render(ctx, &mut self.hmm, &mut self.preprocessing);
+            TabType::Traces => {
+                let _ = self.traces_tab.render(ctx, &mut self.hmm, &mut self.preprocessing, &mut self.logs);
             }
         }
     }

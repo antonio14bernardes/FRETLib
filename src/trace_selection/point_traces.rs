@@ -161,14 +161,14 @@ impl PointTraces {
     }
 
     pub fn get_valid_fret(&self) -> Result<&[f64], PointTracesError> {
-        println!("Got to the point traces function");
+        // println!("Got to the point traces function");
         // Get the FRET trace
         let fret = self.get_trace(&TraceType::FRET)
         .ok_or(PointTracesError::TraceTypeNotPresent { trace_type: TraceType::FRET })?;
 
         // Extract values
         let values = fret.get_values();
-        println!("Values: {:?}", values);
+        // println!("Values: {:?}", values);
 
         // Extract photobleaching idx
         let donor_pb_option = self.donor_photobleaching.clone();

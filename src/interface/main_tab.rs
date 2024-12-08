@@ -32,8 +32,6 @@ pub struct MainTab {
     // Signal Analysis run window
     run_signal_analysis_window: RunSignalProcessingWindow,
 
-    // Log messages
-    logs: Vec<String>,
 }
 
 impl Default for MainTab {
@@ -53,7 +51,7 @@ impl Default for MainTab {
             load_traces_window: LoadTracesWindow::new(),
             run_signal_analysis_window: RunSignalProcessingWindow::new(),
 
-            logs: Vec::new(),
+            
         }
     }
 }
@@ -61,17 +59,17 @@ impl Default for MainTab {
 
 
 impl Tab for MainTab {
-    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints) -> Option<TabOutput>{
+    fn render(&mut self, ctx: &egui::Context, hmm: &mut HMM, preprocessing: &mut SetOfPoints, logs: &mut Vec<String>) -> Option<TabOutput>{
         // The global styles are now applied in MyApp, so we don't need to call apply_global_styles here.
 
         // 1. Top Panel: Load Traces Button
         self.top_panel(ctx);
 
         // 2. Central Panel: Contains Side Panels
-        self.central_panel(ctx, preprocessing, hmm);
+        self.central_panel(ctx, preprocessing, hmm, logs);
 
         // 3. Bottom Panel: Console Output (Resizable)
-        self.bottom_panel(ctx);
+        self.bottom_panel(ctx, logs);
 
         // 4. Render the Filter Settings Window
         self.filter_settings_window.show(ctx, preprocessing);
@@ -152,24 +150,24 @@ impl MainTab {
     }
 
     /// Draw the central panel containing side panels.
-    fn central_panel(&mut self, ctx: &egui::Context, preprocessing: &mut SetOfPoints, hmm: &mut HMM ) {
+    fn central_panel(&mut self, ctx: &egui::Context, preprocessing: &mut SetOfPoints, hmm: &mut HMM, logs: &mut Vec<String>) {
         egui::CentralPanel::default().show(ctx, |ui| {
             // Use ui.columns to divide the space into two columns
             ui.columns(2, |columns| {
                 // Left Panel Content
                 columns[0].vertical(|ui| {
-                    self.preprocessing_panel_content(ui, preprocessing);
+                    self.preprocessing_panel_content(ui, preprocessing, logs);
                 });
 
                 // Right Panel Content
                 columns[1].vertical(|ui| {
-                    self.signal_analysis_panel_content(ui, hmm);
+                    self.signal_analysis_panel_content(ui, hmm, logs);
                 });
             });
         });
     }
 
-    fn bottom_panel(&self, ctx: &egui::Context) {
+    fn bottom_panel(&self, ctx: &egui::Context, logs: &mut Vec<String>) {
         egui::TopBottomPanel::bottom("bottom_panel")
             .resizable(true)
             .default_height(200.0)
@@ -189,7 +187,7 @@ impl MainTab {
                             ui.spacing_mut().item_spacing.y = 2.0; // Smaller gap between lines for console-like text
     
                             // Render console-like output
-                            for log in &self.logs {
+                            for log in logs {
                                 ui.monospace(log);
                             }
     
@@ -201,7 +199,7 @@ impl MainTab {
     }
 
     /// Content of the preprocessing panel.
-    fn preprocessing_panel_content(&mut self, ui: &mut egui::Ui, preprocessing: &mut SetOfPoints) {
+    fn preprocessing_panel_content(&mut self, ui: &mut egui::Ui, preprocessing: &mut SetOfPoints, logs: &mut Vec<String>) {
         ui.add_space(10.0); // Add padding at the top
         ui.vertical(|ui| {
             ui.add_space(10.0); // Add left padding
@@ -210,7 +208,7 @@ impl MainTab {
                 if ui.button("Run Preprocessing").clicked() {
                     // Check if files have been loaded
                     if !self.has_files_loaded(preprocessing) {
-                        self.logs.push("Preprocessing failed: No files have been loaded.".to_string());
+                        logs.push("Preprocessing failed: No files have been loaded.".to_string());
                         return; // Exit early if no files have been loaded
                     }
                 
@@ -232,10 +230,10 @@ impl MainTab {
                         }
                 
                         // Update logs
-                        self.logs.push("Preprocessing completed successfully.".to_string());
+                        logs.push("Preprocessing completed successfully.".to_string());
                     } else {
                         // Update logs with the error
-                        self.logs.push("Preprocessing failed: Could not get valid FRET sequences.".to_string());
+                        logs.push("Preprocessing failed: Could not get valid FRET sequences.".to_string());
                     }
                 }
             });
@@ -267,7 +265,7 @@ impl MainTab {
     }
 
     /// Content of the signal analysis panel.
-    fn signal_analysis_panel_content(&mut self, ui: &mut egui::Ui, hmm: &mut HMM) {
+    fn signal_analysis_panel_content(&mut self, ui: &mut egui::Ui, hmm: &mut HMM, logs: &mut Vec<String>) {
         ui.add_space(10.0); // Add padding at the top
         ui.vertical(|ui| {
             ui.add_space(10.0); // Add left padding
@@ -275,7 +273,7 @@ impl MainTab {
                 ui.add_space(10.0); // Left padding for the button
                 if ui.button("Run Signal Analysis").clicked() {
                     if self.received_sequence_set.is_none() {
-                        self.logs.push("Could not un signal analysis, since no valid fret sequences are available.".to_string());
+                        logs.push("Could not un signal analysis, since no valid fret sequences are available.".to_string());
                         return;
                     }
 
