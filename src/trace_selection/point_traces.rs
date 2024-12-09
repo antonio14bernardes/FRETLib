@@ -322,7 +322,8 @@ impl PointTraces {
         }
 
         if let Ok(new_trace) = IndividualTrace::new(sum_vec, TraceType::TotalPairIntensity) {
-            self.insert_trace(new_trace)?;
+            let _ = self.remove_trace(&TraceType::TotalPairIntensity); // Will return error if no trace to delete but it's fine
+            self.insert_trace(new_trace)?; // Is error if already computed but since we delete it before there should be no error
         } 
 
         Ok(())

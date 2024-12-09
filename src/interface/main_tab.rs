@@ -209,7 +209,7 @@ impl MainTab {
                 if ui.button("Run Preprocessing").clicked() {
                     // Check if files have been loaded
                     if !self.has_files_loaded(preprocessing) {
-                        logs.push("Preprocessing failed: No files have been loaded.".to_string());
+                        logs.push("Preprocessing failed: No valid data available.".to_string());
                         return; // Exit early if no files have been loaded
                     }
                 
@@ -277,7 +277,7 @@ impl MainTab {
                 ui.add_space(10.0); // Left padding for the button
                 if ui.button("Run Signal Analysis").clicked() {
                     if self.received_sequence_set.is_none() {
-                        logs.push("Could not un signal analysis, since no valid fret sequences are available.".to_string());
+                        logs.push("Could not run signal analysis, since no valid fret sequences are available.".to_string());
                         return;
                     }
 
@@ -493,8 +493,8 @@ fn print_rejected_points(preprocess: &SetOfPoints, logs: &mut Vec<String>) {
     let rejected_points = preprocess.get_rejected_points();
 
     if rejected_points.is_none() {
-        println!("No points were rejected.");
-        logs.push("No points were rejected.".to_string());
+        println!("All points passed filtering.");
+        logs.push("All points passed filtering.".to_string());
         return;
     }
 
