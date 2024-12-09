@@ -493,8 +493,8 @@ fn print_rejected_points(preprocess: &SetOfPoints, logs: &mut Vec<String>) {
     let rejected_points = preprocess.get_rejected_points();
 
     if rejected_points.is_none() {
-        println!("No rejected points data available.");
-        logs.push("No rejected points data available.".to_string());
+        println!("No points were rejected.");
+        logs.push("No points were rejected.".to_string());
         return;
     }
 
