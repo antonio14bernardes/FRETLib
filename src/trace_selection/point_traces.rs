@@ -364,30 +364,55 @@ impl PointTraces {
 
         Ok(())
     }
-    
+
+
+
     pub fn compute_pair_correlation(&mut self) -> Result<(), PointTracesError> {
+        // Ensure donor-acceptor pair exists
         let [donor, acceptor] = self.don_acc_pair.as_ref()
-        .ok_or(PointTracesError::NoDonorAcceptorPairFound)?;
-        
+            .ok_or(PointTracesError::NoDonorAcceptorPairFound)?;
+    
+        // Retrieve donor and acceptor trace values
         let d_values = self.get_trace(donor).unwrap().get_values();
         let a_values = self.get_trace(acceptor).unwrap().get_values();
-
-        let [d_mean, d_std] = compute_mean_and_std(d_values);
-        let [a_mean, a_std] = compute_mean_and_std(a_values);
-
-        let mut numerator = 0.0;
+    
+        // Determine the earliest photobleaching index
+        let donor_pb_idx = self.donor_photobleaching
+            .as_ref()
+            .and_then(|v| v.last().copied())
+            .unwrap_or(d_values.len());
+    
+        let acceptor_pb_idx = self.acceptor_photobleaching
+            .as_ref()
+            .and_then(|v| v.last().copied())
+            .unwrap_or(a_values.len());
+    
+        let earliest_pb = donor_pb_idx.min(acceptor_pb_idx);
+    
+        // Truncate the values up to the earliest photobleaching index
+        let d_values_truncated = &d_values[..earliest_pb];
+        let a_values_truncated = &a_values[..earliest_pb];
+    
+        // Compute mean and standard deviation for truncated values
+        let [d_mean, d_std] = compute_mean_and_std(d_values_truncated);
+        let [a_mean, a_std] = compute_mean_and_std(a_values_truncated);
+    
+        // Check for zero standard deviation to prevent division by zero
         let denominator = d_std * a_std;
-
-        if denominator == 0.0 {return Err(PointTracesError::StdZero)}
-
-        for (d, a) in d_values.iter().zip(a_values) {
+        if denominator == 0.0 {
+            return Err(PointTracesError::StdZero);
+        }
+    
+        // Compute numerator for correlation coefficient
+        let mut numerator = 0.0;
+        for (d, a) in d_values_truncated.iter().zip(a_values_truncated) {
             numerator += (d - d_mean) * (a - a_mean);
         }
-
-        numerator /= (d_values.len() - 1) as f64;
-
-        self.correlation_coef = Some(numerator/denominator);
-
+        numerator /= (d_values_truncated.len() - 1) as f64;
+    
+        // Update correlation coefficient in struct
+        self.correlation_coef = Some(numerator / denominator);
+    
         Ok(())
     }
 

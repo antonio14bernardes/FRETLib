@@ -1,6 +1,7 @@
 use eframe::egui;
 use crate::signal_analysis::hmm::hmm_struct::HMM;
-use crate::signal_analysis::hmm::{InitializationMethods, LearnerType};
+use crate::signal_analysis::hmm::{InitializationMethods, LearnerType, StateValueInitMethod};
+use crate::trace_selection::point_traces::PointTracesError;
 use crate::trace_selection::set_of_points::{SetOfPoints, SetOfPointsError};
 
 use super::app::{Tab, TabOutput};
@@ -227,13 +228,16 @@ impl MainTab {
                 
                         if is_full {
                             self.received_sequence_set = Some(sequence_set);
+                            // Update logs
+                            logs.push("Preprocessing completed successfully.".to_string());
                         }
+
+                        print_rejected_points(&preprocessing, logs);
                 
-                        // Update logs
-                        logs.push("Preprocessing completed successfully.".to_string());
+                        
                     } else {
                         // Update logs with the error
-                        logs.push("Preprocessing failed: Could not get valid FRET sequences.".to_string());
+                        logs.push("Preprocessing failed: Could not get any valid FRET sequence.".to_string());
                     }
                 }
             });
@@ -283,7 +287,14 @@ impl MainTab {
                     if self.num_states_find_enabled {
                         input_hint = HMMInputHint::NumStatesFinder;
                     } else if self.initialize_enabled {
-                        input_hint = HMMInputHint::Initializer;
+                        let state_hints_num: Option<usize>;
+                        if let StateValueInitMethod::StateHints { state_values } = 
+                        &self.initialize_settings_window.state_value_init {
+                            state_hints_num = Some(state_values.len());
+                        } else {
+                            state_hints_num = None;
+                        }
+                        input_hint = HMMInputHint::Initializer {state_hints_num};
                     } else if self.learn_enabled {
                         let learner_type = self.learn_settings_window.learner_type.clone();
                         input_hint = HMMInputHint::Learner { learner_type };
@@ -477,10 +488,54 @@ fn run_preprocessing(filter: bool, preprocess: &mut SetOfPoints) -> Result<Vec<V
     preprocess.get_valid_fret()
 }
 
+fn print_rejected_points(preprocess: &SetOfPoints, logs: &mut Vec<String>) {
+    // Retrieve the rejected points
+    let rejected_points = preprocess.get_rejected_points();
+
+    if rejected_points.is_none() {
+        println!("No rejected points data available.");
+        logs.push("No rejected points data available.".to_string());
+        return;
+    }
+
+    let rejected_points = rejected_points.unwrap();
+
+    if rejected_points.is_empty() {
+        println!("No rejected points found.");
+        logs.push("No rejected points found.".to_string());
+        return;
+    }
+
+    // Print the rejected points and their errors
+    println!("Rejected Points and Failed Tests:");
+    logs.push("Rejected Points and Failed Tests:".to_string());
+
+    for (file_path, (_point_trace, error)) in rejected_points {
+        println!("File: {}", file_path);
+        logs.push(format!("File: {}", file_path));
+
+        match error {
+            PointTracesError::FailedFilterTests { tests_failed } => {
+                println!("  Failed Tests:");
+                logs.push("  Failed Tests:".to_string());
+
+                for test in tests_failed {
+                    println!("    - {:?}", test);
+                    logs.push(format!("    - {:?}", test));
+                }
+            }
+            _ => {
+                println!("  Error: {:?}", error);
+                logs.push(format!("  Error: {:?}", error));
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum HMMInputHint {
     Analyzer,
     Learner{learner_type: LearnerType},
-    Initializer,
+    Initializer{state_hints_num: Option<usize>},
     NumStatesFinder,
 }

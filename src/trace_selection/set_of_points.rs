@@ -20,7 +20,7 @@ impl SetOfPoints {
             points: HashMap::new(),
             rejected_points: None,
 
-            filter: FilterSetup::default(),
+            filter: FilterSetup::empty(),
             photobleaching_params: PhotobleachingFilterValues::default(),
             fret_lifetimes_params: FretLifetimesFilterValues::default(),
         }
@@ -97,6 +97,10 @@ impl SetOfPoints {
 
     pub fn get_points(&self) -> &HashMap<String, PointTraces> {
         &self.points
+    }
+
+    pub fn get_rejected_points(&self) -> Option<&HashMap<String, (PointTraces, PointTracesError)>> {
+        self.rejected_points.as_ref()
     }
 
     pub fn detect_photobleaching(&mut self) {

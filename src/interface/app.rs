@@ -3,13 +3,15 @@ use crate::signal_analysis::hmm::hmm_struct::HMMInput;
 use crate::signal_analysis::hmm::hmm_struct::HMM;
 use crate::trace_selection::set_of_points::SetOfPoints;
 
+use super::analysis_tab::AnalysisTab;
 use super::main_tab::*;
-use super::traces_tab::*;
+use super::raw_analysis_tab::RawAnalysis;
 
 #[derive(PartialEq)]
 enum TabType {
     Main,
-    Traces,
+    RawAnalysis,
+    Analysis,
 }
 
 pub enum TabOutput {
@@ -28,9 +30,12 @@ pub struct MyApp {
     // GUI stuff
     current_tab: TabType,
     main_tab: MainTab,
-    traces_tab: TracesTab,
+    raw_analysis_tab: RawAnalysis,
+    analysis_tab: AnalysisTab,
 
     logs: Vec<String>,
+
+    hmm_analysis_ready: bool,
 }
 
 impl Default for MyApp {
@@ -43,9 +48,12 @@ impl Default for MyApp {
             // GUI stuff
             current_tab: TabType::Main,
             main_tab: MainTab::default(),
-            traces_tab: TracesTab::default(),
+            raw_analysis_tab: RawAnalysis::default(),
+            analysis_tab: AnalysisTab::default(),
 
             logs: Vec::new(),
+
+            hmm_analysis_ready: false,
         }
     }
 }
@@ -87,7 +95,10 @@ impl eframe::App for MyApp {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.current_tab, TabType::Main, "Main");
                 if raw_analysis_available {
-                    ui.selectable_value(&mut self.current_tab, TabType::Traces, "Raw Analysis");
+                    ui.selectable_value(&mut self.current_tab, TabType::RawAnalysis, "Raw Analysis");
+                }
+                if self.hmm_analysis_ready {
+                    ui.selectable_value(&mut self.current_tab, TabType::Analysis, "Analysis");
                 }
             });
         });
@@ -98,11 +109,22 @@ impl eframe::App for MyApp {
                 let tab_output_option = self.main_tab.render(ctx, &mut self.hmm, &mut self.preprocessing, &mut self.logs);
 
                 if let Some(TabOutput::Main { hmm_input }) = tab_output_option {
-                    self.hmm.run(hmm_input).unwrap();
+                    match self.hmm.run(hmm_input) {
+                        Ok(_) => {
+                            self.logs.push("HMM run was successful.".to_string());
+                            self.hmm_analysis_ready = true;
+                        }
+                        Err(e) => {
+                            self.logs.push(format!("Error running HMM: {:?}", e));
+                        }
+                    }
                 }
             }
-            TabType::Traces => {
-                let _ = self.traces_tab.render(ctx, &mut self.hmm, &mut self.preprocessing, &mut self.logs);
+            TabType::RawAnalysis => {
+                let _ = self.raw_analysis_tab.render(ctx, &mut self.hmm, &mut self.preprocessing, &mut self.logs);
+            }
+            TabType::Analysis => {
+                let _ = self.analysis_tab.render(ctx, &mut self.hmm, &mut self.preprocessing, &mut self.logs);
             }
         }
     }

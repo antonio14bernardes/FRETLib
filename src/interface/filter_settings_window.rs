@@ -16,7 +16,7 @@ impl FilterSettingsWindow {
     pub fn new() -> Self {
         Self {
             is_open: false,
-            filter_setup: FilterSetup::default(),
+            filter_setup: FilterSetup::empty(),
             input_buffers: HashMap::new(),
         }
     }
@@ -75,7 +75,7 @@ impl FilterSettingsWindow {
                                 println!("Set button clicked.");
                                 preprocessing.set_filter_setup(self.filter_setup.clone());
                             }
-                            if ui.button("Reset").clicked() {
+                            if ui.button("Default").clicked() {
                                 self.reset_to_defaults();
                                 println!("Filter Settings Reset to Defaults");
                             }
@@ -95,8 +95,6 @@ impl FilterSettingsWindow {
                     });
                 });
         }
-
-        // println!("Current filter: {:?}", self.filter_setup);
     }
 
     

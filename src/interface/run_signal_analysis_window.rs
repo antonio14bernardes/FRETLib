@@ -16,8 +16,8 @@ pub struct RunSignalProcessingWindow {
     pub num_states: Option<usize>,
     pub state_values: Vec<f64>,
     pub state_noises: Vec<f64>,
-    pub start_matrix: Vec<f64>,         // 1D representation of start matrix
-    pub transition_matrix: Vec<Vec<f64>>, // 2D matrix for transitions
+    pub start_matrix: Vec<f64>,
+    pub transition_matrix: Vec<Vec<f64>>,
 
     pub input_buffers: HashMap<String, String>, // Temporary buffers for input fields
 
@@ -74,7 +74,7 @@ impl RunSignalProcessingWindow {
                     if let Some(hint) = &self.hmm_input_hint {
                         match hint {
                             HMMInputHint::NumStatesFinder => self.render_num_states_finder(ui),
-                            HMMInputHint::Initializer => self.render_initializer(ui),
+                            HMMInputHint::Initializer {state_hints_num} => self.render_initializer(state_hints_num.clone(), ui),
                             HMMInputHint::Learner { learner_type } => {
                                 // Clone or copy learner_type to avoid the borrow conflict
                                 let learner_type = learner_type.clone();
@@ -90,17 +90,6 @@ impl RunSignalProcessingWindow {
                     ui.horizontal(|ui| {
                         if ui.button("Run").clicked() {
                             self.run_has_been_pressed = true;
-
-                            // if !(self.state_values_valid && 
-                            //     self.state_noises_valid && 
-                            //     self.start_matrix_valid && 
-                            //     self.transition_matrix_valid) ||
-                            //     self.states_empty {
-                                
-
-                            //     // Get outta here and don't construct input nor HMM process
-                            //     return;
-                            // }
 
                             if !self.check_overall_validity() {
                                 // Get outta here and don't construct input nor HMM process
@@ -128,17 +117,6 @@ impl RunSignalProcessingWindow {
                     });
                 });
             });
-        
-        // println!("Num States {:?}", self.num_states); 
-        // println!("States empty {}", self.states_empty);  
-        // println!("State values: {:?}", self.state_values);
-        // println!("State values valid: {}", self.state_values_valid);
-        // println!("State noises: {:?}", self.state_noises);
-        // println!("State noises valid: {:?}", self.state_noises_valid);
-        // println!("Start matrix: {:?}", self.start_matrix);
-        // println!("Start matrix valid: {}", self.start_matrix_valid);
-        // println!("Transition matrix: {:?}", self.transition_matrix);
-        // println!("Transition matrix valid: {}", self.transition_matrix_valid);
 
 
         // Return Option of HMMInput. If Some(input), then the HMM is ready to go, otherwise not yet.
@@ -150,7 +128,15 @@ impl RunSignalProcessingWindow {
         ui.label("Num States Finder does not require additional inputs.");
     }
 
-    fn render_initializer(&mut self, ui: &mut egui::Ui) {
+    fn render_initializer(&mut self, state_hints_num: Option<usize>,  ui: &mut egui::Ui) {
+        if state_hints_num.is_some() {
+            self.num_states = state_hints_num;
+            ui.label("Number of states already defined in the State Hints initialization.".to_string());
+
+            return;
+        }
+
+        // If init method for values isnt state hints
         ui.label("Initializer Configuration:");
         render_numeric_input_with_layout(
             ui,
@@ -645,7 +631,7 @@ impl RunSignalProcessingWindow {
     fn check_overall_validity(&self) -> bool {
         match &self.hmm_input_hint {
             Some(HMMInputHint::NumStatesFinder) => true,
-            Some(HMMInputHint::Initializer) => {
+            Some(HMMInputHint::Initializer {..}) => {
                 let check = self.num_states.map(|value| value > 0);
                 // println!("Check: {:?}", check);
                 check.unwrap_or(false)
@@ -674,7 +660,7 @@ impl RunSignalProcessingWindow {
             Some(HMMInputHint::NumStatesFinder) => Some(HMMInput::NumStatesFinder {
                 sequence_set: self.sequence_set.as_ref().unwrap().clone(),
             }),
-            Some(HMMInputHint::Initializer) => Some(HMMInput::Initializer {
+            Some(HMMInputHint::Initializer {..}) => Some(HMMInput::Initializer {
                 num_states: self.num_states.expect("How the hell did we get here without setting the number of states?"),
                 sequence_set: self.sequence_set.as_ref().unwrap().clone(),
             }),
