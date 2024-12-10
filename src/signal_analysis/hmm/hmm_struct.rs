@@ -187,7 +187,6 @@ impl HMM {
         if let HMMInput::Initializer { num_states, sequence_set }= input {
             // Run Initializer
             let init_output_res = initializer.get_intial_values(&sequence_set, num_states);
-            println!("GOt init output res: {:?}", init_output_res);
             let init_output = init_output_res.map_err(|err| HMMError::InitializerError { err })?;
 
             

@@ -570,10 +570,7 @@ pub fn run_baum_welch_on_sequence_set(
     let mut avg_state_noise: Vec<f64> = vec![0.0; num_states];
     let mut avg_start_matrix: Vec<f64> = vec![0.0; num_states];
     let mut avg_transition_matrix: Vec<Vec<f64>> = vec![vec![0.0; num_states]; num_states];
-    let mut i = 0;
     for sequence_values in sequence_set {
-        i += 1;
-        println!("iter {}", i);
         // Setup the Baum-Welch algorithm
         let mut baum = BaumWelch::new(num_states as u16);
 

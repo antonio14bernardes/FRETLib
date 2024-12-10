@@ -394,7 +394,6 @@ impl InitializationSettingsWindow {
             }
         }
 
-        // println!("State noise temp in show: {:?}", self.state_noise_init_temp);
     }
     fn render_start_matrix_settings(&mut self, ui: &mut egui::Ui) {
         // Dropdown to select the start matrix initialization method

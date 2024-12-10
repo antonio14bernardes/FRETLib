@@ -91,45 +91,14 @@ impl Tab for MainTab {
         let hmm_input_ready = self.run_signal_analysis_window.show(ctx);
 
         if let Some(hmm_input) = hmm_input_ready {
-            println!("Received input: {:?}", hmm_input);
-
             self.setup_hmm(hmm);
 
-            println!("Setup hmm: {:?}", hmm);
+            // println!("Setup hmm: {:?}", hmm);
 
             return Some(TabOutput::Main { hmm_input })
         }
 
         return None;
-
-
-
-        // println!("Showing current HMM setup\n");
-        // println!("Learner:");
-        // println!("Active?: {}", self.learn_enabled);
-        // if self.learn_enabled {
-        //     println!("Learner type: {:?}", self.learn_settings_window.learner_type);
-        //     println!("Learner setup: {:?}", self.learn_settings_window.learner_setup);
-        // }
-        // println!("\n");
-        // println!("Initializer:");
-        // println!("Active?: {}", self.initialize_enabled);
-        // if self.initialize_enabled {
-        //     println!("Initializer setup:");
-        //     println!("-    Values init:       {:?}",  self.initialize_settings_window.state_value_init);
-        //     println!("-    Noise init:        {:?}",  self.initialize_settings_window.state_noise_init);
-        //     println!("-    Start matrix init: {:?}",  self.initialize_settings_window.start_matrix_init);
-        //     println!("-    Trans matrix init: {:?}",  self.initialize_settings_window.transition_matrix_init);
-        // }
-        // println!("\n");
-        // println!("Num States Finder:");
-        // println!("Active?: {}", self.num_states_find_enabled);
-        // if self.num_states_find_enabled {
-        //     println!("Strategy: {:?}", self.nsf_seettings_window.strategy);
-        // }
-        
-        
-        // println!("filter: {:?}", preprocessing.get_filter_setup());
 
     }
 }

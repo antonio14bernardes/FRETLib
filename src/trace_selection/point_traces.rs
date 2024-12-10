@@ -98,7 +98,9 @@ impl PointTraces {
                     Err(PointTracesError::TraceTypeAlreadyPresent{trace_type: trace_type.clone()})
                 }
             }
-            Err(e) => Err(PointTracesError::IndividualTraceError { error: e, trace_type }),
+            Err(e) => {
+                Err(PointTracesError::IndividualTraceError { error: e, trace_type })
+            },
         }
     }
 
@@ -161,22 +163,16 @@ impl PointTraces {
     }
 
     pub fn get_valid_fret(&self) -> Result<&[f64], PointTracesError> {
-        // println!("Got to the point traces function");
         // Get the FRET trace
         let fret = self.get_trace(&TraceType::FRET)
         .ok_or(PointTracesError::TraceTypeNotPresent { trace_type: TraceType::FRET })?;
 
         // Extract values
         let values = fret.get_values();
-        // println!("Values: {:?}", values);
 
         // Extract photobleaching idx
         let donor_pb_option = self.donor_photobleaching.clone();
         let acceptor_pb_option = self.acceptor_photobleaching.clone();
-
-        // if donor_pb_option.is_none() || acceptor_pb_option.is_none() {
-        //     return Err(PointTracesError::FilteringNotPerformed)
-        // }
 
         let donor_pb_vec: Vec<usize> = donor_pb_option.unwrap_or(Vec::new());
         let acceptor_db_vec: Vec<usize> = acceptor_pb_option.unwrap_or(Vec::new());
@@ -323,7 +319,10 @@ impl PointTraces {
 
         if let Ok(new_trace) = IndividualTrace::new(sum_vec, TraceType::TotalPairIntensity) {
             let _ = self.remove_trace(&TraceType::TotalPairIntensity); // Will return error if no trace to delete but it's fine
-            self.insert_trace(new_trace)?; // Is error if already computed but since we delete it before there should be no error
+            let err = self.insert_trace(new_trace); // Is error if already computed but since we delete it before there should be no error
+            if err.is_err() {println!("Got error here");}
+            
+            err?;
         } 
 
         Ok(())
@@ -480,6 +479,8 @@ impl PointTraces {
         photobleaching_filter_values: &PhotobleachingFilterValues,
         fret_lifetimes_filter_values: &FretLifetimesFilterValues,
     ) -> Result<ValuesToFilter, PointTracesError>{
+
+        println!("Got to the prepare filter values");
         self.update_donor_acceptor();
 
         // if let Err(e) = self.detect_photobleaching(photobleaching_filter_values) {

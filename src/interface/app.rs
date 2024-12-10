@@ -84,7 +84,7 @@ impl MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Apply global styles here
+        // Apply global styles!
         self.apply_global_styles(ctx);
 
         // Check if points are loaded to conditionally show the "Raw Analysis" tab

@@ -38,7 +38,7 @@ impl FilterSettingsWindow {
     
                         // Wrap all fields in a scrollable area
                         egui::ScrollArea::vertical()
-                            .auto_shrink([false, false]) // Prevent auto-shrinking
+                            .auto_shrink([false, false]) 
                             .show(ui, |ui| {
                                 let space_between_fields = 10.0_f32;
 
@@ -69,27 +69,24 @@ impl FilterSettingsWindow {
     
                         ui.add_space(10.0);
     
-                        // Reset and Close buttons
+                        // Reset button
                         ui.horizontal(|ui| {
                             if ui.button("Set").clicked() {
-                                println!("Set button clicked.");
                                 preprocessing.set_filter_setup(self.filter_setup.clone());
                             }
                             if ui.button("Default").clicked() {
                                 self.reset_to_defaults();
-                                println!("Filter Settings Reset to Defaults");
                             }
 
                             // Clean button
                             if ui.button("Clean").clicked() {
                                 self.filter_setup = FilterSetup::empty();
                                 self.input_buffers.clear(); // Optionally clear input buffers
-                                println!("Filter Settings Cleaned");
                             }
-    
+
+                            // Close button
                             if ui.button("Close").clicked() {
                                 self.is_open = false;
-                                println!("Filter Settings Window closed");
                             }
                         });
                     });
@@ -103,7 +100,7 @@ impl FilterSettingsWindow {
     
             self.filter_setup = default_filter.clone();
     
-            // Update input buffers to reflect default values
+            // Update input buffers to have default values
             self.input_buffers.clear();
     
             // Populate input buffers with default values
@@ -168,7 +165,7 @@ impl FilterSettingsWindow {
             }
         }
     
-   /// Static method for rendering numeric filter fields
+   /// Static helper thing for rendering numeric filter fields
    fn render_numeric_filter_field<T>(
     ui: &mut egui::Ui,
     ctx: &egui::Context,
@@ -243,14 +240,10 @@ impl FilterSettingsWindow {
                         {
                             match input_buffer.parse::<T>() {
                                 Ok(parsed_value) => {
-                                    println!("Selected: {}", &selected);
                                     *comparison = Comparison::from_str(&selected).unwrap().with_value(parsed_value);
                                 }
                                 Err(_) => {
-                                    println!(
-                                        "Invalid input for {}: {}. Keeping old value.",
-                                        label, input_buffer
-                                    );
+                                    
                                     // Revert to the previous value if parsing fails
                                     *input_buffer = comparison.value_as_string();
                                 }
@@ -267,9 +260,8 @@ impl FilterSettingsWindow {
     }
 }
 
-/// Helper function to get com
 
-/// Helper function to get comparison types based on the generic type T.
+/// Helper function to get comparison types based on a generic type
 fn get_comparison_types<T>() -> Vec<String>
 where
     T: Display,
@@ -317,7 +309,7 @@ where
         }
     }
 
-    ///Attempts to parse a Comparison from a string.
+    ///Tries to parse a Comparison from a string.
     fn from_str(s: &str) -> Result<Self, ()>
     where
         T: Default + Clone,

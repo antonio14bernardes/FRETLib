@@ -54,7 +54,7 @@ impl Tab for AnalysisTab {
         let state_id_sequences: Option<&Vec<Vec<usize>>> = hmm_analyzer.get_state_sequences();
         let sequences: Option<&Vec<Vec<f64>>> = hmm_analyzer.get_sequences();
         
-        let traces: &std::collections::HashMap<String, crate::trace_selection::point_traces::PointTraces> = preprocessing.get_points();
+        // let traces: &std::collections::HashMap<String, crate::trace_selection::point_traces::PointTraces> = preprocessing.get_points();
 
         egui::CentralPanel::default().show(ctx, |ui| {
 
@@ -127,7 +127,7 @@ impl AnalysisTab {
             ui.heading("State Distributions");
 
             // Plotting parameters
-            let num_points = 200;
+            let num_points = 200; // kinda like resolution
             let num_stds = 3.0; // ±3 stds by default
             
 
@@ -141,7 +141,7 @@ impl AnalysisTab {
                 })
                 .collect();
 
-            // Show the lines in a single plot with a legend
+            // Show the lines in a single plot
             Plot::new("states_gaussians")
                 .legend(Legend::default())
                 .allow_drag(false)
@@ -178,7 +178,7 @@ impl AnalysisTab {
             })
             .collect();
     
-            // Set a fixed bar width (e.g. 0.8) so bars don't appear too wide
+            // Set a fixed bar width but this is kinda sus
             let chart = BarChart::new(bars).width(0.5);
     
             Plot::new("state_occupancy_plot")
@@ -204,8 +204,8 @@ impl AnalysisTab {
 
     fn visualize_start_matrix(&mut self, ui: &mut egui::Ui, start_matrix: Option<&StartMatrix>) {
         if let Some(start_matrix) = start_matrix {
-            let values = &start_matrix.matrix; // Access the flat vector
-            let size = values.len(); // Number of states
+            let values = &start_matrix.matrix; 
+            let size = values.len(); 
     
             if size == 0 {
                 ui.label("Empty start matrix.");
@@ -215,11 +215,11 @@ impl AnalysisTab {
             ui.heading("Start Matrix");
     
             egui::Grid::new("start_matrix_grid")
-                .striped(true) // Alternate row coloring for readability
+                .striped(true) 
                 .spacing([20.0, 8.0]) // Column and row spacing
                 .show(ui, |ui| {
                     // Header Row: State IDs
-                    ui.label("State ID"); // Label for left column
+                    ui.label("State ID"); 
                     for col in 0..size {
                         ui.label(format!("State {}", col));
                     }
@@ -228,7 +228,7 @@ impl AnalysisTab {
                     // Row with Start Probabilities
                     ui.label("Start Probabilities");
                     for &value in values {
-                        ui.label(format!("{:.3}", value)); // Format probabilities to 3 decimals
+                        ui.label(format!("{:.3}", value));
                     }
                     ui.end_row();
                 });
@@ -239,8 +239,8 @@ impl AnalysisTab {
    
     fn visualize_transition_matrix(&mut self, ui: &mut egui::Ui, transition_matrix: Option<&TransitionMatrix>) {
         if let Some(matrix) = transition_matrix {
-            let raw_matrix = &matrix.matrix.raw_matrix; // Access the nested Vec<Vec<f64>>
-            let size = raw_matrix.len(); // Number of rows/columns (assuming square matrix)
+            let raw_matrix = &matrix.matrix.raw_matrix;
+            let size = raw_matrix.len();
     
             if size == 0 {
                 ui.label("Empty transition matrix.");
@@ -253,18 +253,17 @@ impl AnalysisTab {
                 .striped(true) // Alternate row coloring
                 .spacing([20.0, 8.0]) // Column and row spacing
                 .show(ui, |ui| {
-                    // Header Row (Column Labels)
                     ui.label("");
                     for col in 0..size {
-                        ui.label(format!("State {}", col)); // Column headers
+                        ui.label(format!("State {}", col));
                     }
                     ui.end_row();
     
                     // Matrix Rows
                     for (row_idx, row) in raw_matrix.iter().enumerate() {
-                        ui.label(format!("State {}", row_idx)); // Row label
+                        ui.label(format!("State {}", row_idx)); 
                         for &value in row {
-                            ui.label(format!("{:.3}", value)); // Format the value (3 decimal places)
+                            ui.label(format!("{:.3}", value));
                         }
                         ui.end_row();
                     }
@@ -322,7 +321,6 @@ impl AnalysisTab {
             
             ui.horizontal(|ui| {
                 ui.label("Select a trace:");
-                    // .strong();   // Optional: Make the label bold
 
                 egui::ComboBox::from_label("")
                     .selected_text(
@@ -331,7 +329,7 @@ impl AnalysisTab {
                         )
                         .size(12.0), // Smaller text for the selected value
                     )
-                    .width(120.0) // Optional: Adjust width for compactness
+                    .width(120.0) 
                     .show_ui(ui, |ui| {
                         for key in traces.keys() {
                             let display_text = RichText::new(key).size(12.0); // Smaller text for selectable items
