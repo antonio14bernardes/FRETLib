@@ -302,7 +302,6 @@ impl MainTab {
                             .link(egui::RichText::new("See options").size(12.0))
                             .clicked()
                         {
-                            println!("Got before calling the opening of the window");
                             self.learn_settings_window.open(&hmm);
                         }
                     });

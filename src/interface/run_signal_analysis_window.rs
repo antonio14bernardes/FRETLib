@@ -680,8 +680,8 @@ impl RunSignalProcessingWindow {
                         num_states = self.state_values.len();
                         learner_init = LearnerSpecificInitialValues::BaumWelch {
                             states: HMMInstance::generate_state_set(&self.state_values, &self.state_noises).unwrap(),
-                            start_matrix: Some(StartMatrix::new(self.start_matrix.clone())),
-                            transition_matrix: Some(TransitionMatrix::new(self.transition_matrix.clone())),
+                            start_matrix: Some(StartMatrix::new_balanced(num_states)),
+                            transition_matrix: Some(TransitionMatrix::new_balanced(num_states)),
                         };
                     }
                 }

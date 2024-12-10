@@ -480,7 +480,6 @@ impl PointTraces {
         fret_lifetimes_filter_values: &FretLifetimesFilterValues,
     ) -> Result<ValuesToFilter, PointTracesError>{
 
-        println!("Got to the prepare filter values");
         self.update_donor_acceptor();
 
         // if let Err(e) = self.detect_photobleaching(photobleaching_filter_values) {
