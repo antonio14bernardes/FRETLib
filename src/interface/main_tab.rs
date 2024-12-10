@@ -469,8 +469,8 @@ fn print_rejected_points(preprocess: &SetOfPoints, logs: &mut Vec<String>) {
     let rejected_points = rejected_points.unwrap();
 
     if rejected_points.is_empty() {
-        println!("No rejected points found.");
-        logs.push("No rejected points found.".to_string());
+        println!("No points rejected.");
+        logs.push("No points rejected.".to_string());
         return;
     }
 
