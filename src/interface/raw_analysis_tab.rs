@@ -2,7 +2,7 @@ use eframe::egui::{self, RichText};
 use egui_plot::{Line, Plot, PlotPoints, BarChart, Bar};
 use crate::{
     signal_analysis::hmm::hmm_struct::HMM,
-    trace_selection::{individual_trace::TraceType, set_of_points::SetOfPoints}
+    trace_selection::set_of_points::SetOfPoints
 };
 use super::app::{Tab, TabOutput};
 

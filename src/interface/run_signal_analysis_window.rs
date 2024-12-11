@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use eframe::egui;
 
-use crate::signal_analysis::hmm::{hmm_instance::HMMInstance, hmm_matrices::{StartMatrix, TransitionMatrix}, hmm_struct::{HMMComponent, HMMInput}, state::State, LearnerSpecificInitialValues, LearnerType};
+use crate::signal_analysis::hmm::{hmm_instance::HMMInstance, hmm_matrices::{StartMatrix, TransitionMatrix}, hmm_struct::HMMInput, LearnerSpecificInitialValues, LearnerType};
 
 use super::{learn_settings_window::render_numeric_input_with_layout, main_tab::HMMInputHint};
 
@@ -529,33 +529,22 @@ impl RunSignalProcessingWindow {
 
         // Check for correct number of rows and columns
         self.transition_matrix_valid &= self.transition_matrix.len() == self.state_values.len();
-        // if !self.transition_matrix_valid {
-        //     println!("Failed on row count");
-        // }
-        let prev = self.transition_matrix_valid;
+        
         self.transition_matrix.iter().for_each(|row| self.transition_matrix_valid &= row.len() == self.state_values.len());
-        // if !self.transition_matrix_valid && prev {
-        //     println!("Failed on column count");
-        // }
+        
 
-        let prev = self.transition_matrix_valid;
         // Check for correct values
         for row in &self.transition_matrix {
             for value in row {
                 self.transition_matrix_valid &= *value >= 0.0 && *value <= 1.0;
             }
         }
-        // if !self.transition_matrix_valid && prev {
-        //     println!("Failed on limits");
-        // }
+        
 
-        let prev = self.transition_matrix_valid;
         for row in &self.transition_matrix {
             self.transition_matrix_valid &= row.iter().sum::<f64>() == 1.0;
         }
-        // if !self.transition_matrix_valid && prev {
-        //     println!("Failed on sum");
-        // }
+        
     }
 
 

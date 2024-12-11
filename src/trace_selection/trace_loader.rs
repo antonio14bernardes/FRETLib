@@ -4,7 +4,6 @@ use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
-use std::str::FromStr;
 
 // Function to map column header to TraceType enum
 fn parse_trace_type(header: &str) -> Result<TraceType, TraceLoaderError> {

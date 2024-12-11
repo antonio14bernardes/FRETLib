@@ -1,29 +1,10 @@
-use core::{f64, num};
-use std::cmp::min;
-use std::collections::HashSet;
-use std::iter::Filter;
-use std::thread;
-
-use fret_lib::optimization::amalgam_idea::{self, AmalgamIdea};
-use fret_lib::optimization::constraints::OptimizationConstraint;
-use fret_lib::optimization::optimizer::{FitnessFunction, Optimizer};
-use fret_lib::signal_analysis::hmm::hmm_instance::{HMMInstance, HMMInstanceError};
-use fret_lib::signal_analysis::hmm::hmm_struct::{HMMInput, NumStatesFindStratWrapper, HMM};
-use fret_lib::signal_analysis::hmm::learning::hmm_learner::HMMLearner;
-use fret_lib::signal_analysis::hmm::learning::learner_trait::{HMMLearnerTrait, LearnerSpecificInitialValues, LearnerSpecificSetup, LearnerType};
-use fret_lib::signal_analysis::hmm::number_states_finder::hmm_num_states_finder::{HMMNumStatesFinder, NumStatesFindStrat};
-use fret_lib::signal_analysis::hmm::optimization_tracker::{self, StateCollapseHandle, TerminationCriterium};
+use fret_lib::signal_analysis::hmm::hmm_instance::HMMInstance;
+use fret_lib::signal_analysis::hmm::hmm_struct::{HMMInput, HMM};
+use fret_lib::signal_analysis::hmm::learning::learner_trait::{LearnerSpecificSetup, LearnerType};
 use fret_lib::signal_analysis::hmm::state::State;
 use fret_lib::signal_analysis::hmm::hmm_matrices::{StartMatrix, TransitionMatrix};
-use fret_lib::signal_analysis::hmm::viterbi::Viterbi;
-use fret_lib::signal_analysis::hmm::{baum_welch, StateValueInitMethod};
-use fret_lib::signal_analysis::hmm::baum_welch::*;
-use fret_lib::trace_selection::filter::FilterSetup;
-use fret_lib::trace_selection::set_of_points::SetOfPoints;
-use nalgebra::{DMatrix, DVector};
-use rand::{seq, thread_rng, Rng};
-use plotters::prelude::*;
-use rfd::FileDialog;
+use fret_lib::signal_analysis::hmm::StateValueInitMethod;
+
 
 
 
@@ -93,26 +74,9 @@ fn _main_hmm() {
 
     let input = HMMInput::Initializer { num_states: real_states.len(), sequence_set: sequence_set };
 
+    hmm.run(input).unwrap();
 
-
-
-
-
-    // hmm.run(input).unwrap();
-
-
-    // Launch a thread to run the HMM 
-    let handle = thread::spawn(move || {
-        match hmm.run(input) {
-            Ok(()) => Ok(hmm),
-            Err(e) => Err(e),
-        }
-        
-    });
-    let updated_hmm_result = handle.join().expect("Thread panicked");
-    let updated_hmm = updated_hmm_result.unwrap();
-
-    let analyzer = updated_hmm.get_analyzer();
+    let analyzer = hmm.get_analyzer();
     let opt_states = analyzer.get_states().unwrap();
     let opt_start_matrix = analyzer.get_start_matrix().unwrap();
     let opt_transition_matrix = analyzer.get_transition_matrix().unwrap();

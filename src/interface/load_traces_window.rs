@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use rfd::FileDialog;
 use eframe::egui;
 

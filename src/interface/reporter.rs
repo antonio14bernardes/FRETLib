@@ -1,8 +1,6 @@
 use rfd::FileDialog;
 
 use crate::signal_analysis::hmm::analysis::hmm_analyzer::HMMAnalyzer;
-use crate::signal_analysis::hmm::hmm_matrices::{StartMatrix, TransitionMatrix};
-use crate::signal_analysis::hmm::state::State;
 use crate::trace_selection::set_of_points::SetOfPoints;
 
 use std::fs::{File, create_dir_all};
@@ -115,7 +113,7 @@ impl Reporter {
                 writeln!(writer, "Trace: {}", key)?;
                 writeln!(writer, "Real,Idealized,State ID")?;
     
-                for (i, (&real_value, &state_id)) in sequence.iter().zip(state_ids).enumerate() {
+                for (_i, (&real_value, &state_id)) in sequence.iter().zip(state_ids).enumerate() {
                     let idealized_value = states
                         .get(state_id)
                         .map(|s| s.value)

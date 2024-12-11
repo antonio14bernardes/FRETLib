@@ -1,6 +1,5 @@
-use eframe::egui::{self, Color32, RichText, Vec2};
+use eframe::egui::{self, Color32, RichText};
 use egui_plot::{Bar, BarChart, Legend, Line, Plot, PlotPoints};
-use egui_heatmap::{BitmapWidget, Data, MultiBitmapWidgetSettings};
 
 use std::f64::consts::PI;
 use crate::signal_analysis::hmm;

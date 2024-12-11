@@ -1,7 +1,6 @@
 use eframe::egui;
 use crate::signal_analysis::hmm::amalgam_integration::amalgam_modes::{AMALGAM_DEPENDENCY_DEFAULT, AMALGAM_FITNESS_DEFAULT, AMALGAM_ITER_MEMORY_DEFAULT, AMALGAM_MAX_ITERS_DEFAULT};
 use crate::signal_analysis::hmm::hmm_struct::HMM;
-use crate::signal_analysis::hmm::learning::learner_trait::HMMLearnerTrait;
 use crate::signal_analysis::hmm::optimization_tracker::TerminationCriterium;
 use crate::signal_analysis::hmm::{AmalgamDependencies, AmalgamFitness, LearnerSpecificSetup, LearnerType};
 use std::collections::HashMap;
@@ -33,7 +32,7 @@ impl LearnSettingsWindow {
         }
     }
 
-    pub fn open(&mut self, hmm: &HMM) {
+    pub fn open(&mut self, _hmm: &HMM) {
         self.is_open = true;
         // Sync the buffers with the values in learner_setup
         self.sync_buffers_with_setup();

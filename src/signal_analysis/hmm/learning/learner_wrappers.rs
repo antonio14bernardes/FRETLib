@@ -1,8 +1,8 @@
 use crate::optimization::amalgam_idea::AmalgamIdea;
 use crate::signal_analysis::hmm::amalgam_integration::amalgam_fitness_functions::{AmalgamHMMFitness, AmalgamHMMFitnessFunction};
 use crate::signal_analysis::hmm::amalgam_integration::amalgam_modes::get_amalgam_object;
-use crate::signal_analysis::hmm::baum_welch::{run_baum_welch_on_sequence_set, BaumWelch, BAUM_WELCH_TERMINATION_DEFAULT};
-use crate::signal_analysis::hmm::optimization_tracker::{StateCollapseHandle, TerminationCriterium};
+use crate::signal_analysis::hmm::baum_welch::{run_baum_welch_on_sequence_set, BAUM_WELCH_TERMINATION_DEFAULT};
+use crate::signal_analysis::hmm::optimization_tracker::TerminationCriterium;
 use crate::signal_analysis::hmm::{StartMatrix, State, TransitionMatrix};
 use crate::optimization::optimizer::{OptimizationFitness, Optimizer};
 use crate::optimization::amalgam_idea::YapLevel;

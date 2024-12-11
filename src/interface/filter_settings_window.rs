@@ -1,5 +1,5 @@
 use eframe::egui;
-use crate::trace_selection::filter::{self, Comparison, FilterSetup};
+use crate::trace_selection::filter::{Comparison, FilterSetup};
 use crate::trace_selection::set_of_points::SetOfPoints;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
@@ -164,101 +164,6 @@ impl FilterSettingsWindow {
                     .insert("Average FRET".to_string(), default.value_as_string());
             }
         }
-    
-   /// Static helper thing for rendering numeric filter fields
-   fn render_numeric_filter_field2<T>(
-    ui: &mut egui::Ui,
-    ctx: &egui::Context,
-    label: &str,
-    filter_option: &mut Option<Comparison<T>>,
-    input_buffers: &mut HashMap<String, String>,
-    ) where
-        T: Default + Clone + Display + FromStr,
-        <T as FromStr>::Err: fmt::Debug,
-    {
-        let buffer_key = label.to_string();
-        let input_buffer = input_buffers.entry(buffer_key.clone()).or_insert_with(|| {
-            filter_option
-                .as_ref()
-                .map_or_else(|| T::default().to_string(), |comparison| comparison.value_as_string())
-        });
-
-        let is_active = filter_option.is_some();
-
-        ui.horizontal(|ui| {
-            let mut active = is_active;
-
-            // Checkbox and label
-            if ui.checkbox(&mut active, label).changed() {
-                if active {
-                    // Set to default value
-                    *filter_option = Some(Comparison::Equal {
-                        value: T::default(),
-                    });
-                    *input_buffer = T::default().to_string();
-                } else {
-                    *filter_option = None;
-                    *input_buffer = String::new();
-                }
-            }
-
-            if active {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                    if let Some(ref mut comparison) = filter_option {
-                        // Render the text input to the right of the combo box
-                        // Render the text input and detect focus loss
-                        let response = ui.add_sized([100.0, 20.0], |ui: &mut egui::Ui| {
-                            ui.text_edit_singleline(input_buffer)
-                        });
-
-                        // ComboBox for selecting comparison type, with increased width
-                        let comparison_types = get_comparison_types::<T>();
-                        let current_comparison = comparison.to_string();
-                        let mut selected = current_comparison.clone();
-
-                        egui::ComboBox::from_id_source(format!("combo_{}", label))
-                        .selected_text(current_comparison)
-                        .width(150.0) // Set the width of the combo box
-                        .show_ui(ui, |ui| {
-                            for comp in &comparison_types {
-                                if ui.selectable_value(&mut selected, comp.clone(), comp.clone()).clicked() {
-                                    // Update comparison type when ComboBox selection changes
-                                    if let Ok(new_comparison) = Comparison::from_str(&selected) {
-                                        *comparison = new_comparison.with_value(
-                                            input_buffer
-                                                .parse::<T>()
-                                                .unwrap_or_else(|_| T::default()),
-                                        );
-                                    }
-                                }
-                            }
-                        });
-
-                        // Update comparison value if input is valid on Enter key or focus loss
-                        if !input_buffer.is_empty()
-                            && (response.lost_focus() || ctx.input(|i| i.key_pressed(egui::Key::Enter)))
-                        {
-                            match input_buffer.parse::<T>() {
-                                Ok(parsed_value) => {
-                                    *comparison = Comparison::from_str(&selected).unwrap().with_value(parsed_value);
-                                }
-                                Err(_) => {
-                                    
-                                    // Revert to the previous value if parsing fails
-                                    *input_buffer = comparison.value_as_string();
-                                }
-                            }
-                        }
-
-                        
-                    }
-                });
-            }
-        });
-
-        ui.add_space(5.0);
-    }
-
 
        /// Static helper for rendering numeric filter fields
    fn render_numeric_filter_field<T>(
