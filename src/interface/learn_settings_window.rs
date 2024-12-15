@@ -100,7 +100,6 @@ impl LearnSettingsWindow {
                         // Buttons at the bottom
                         ui.horizontal(|ui| {
                             if ui.button("Set").clicked() {
-                                println!("Set button clicked (no functionality yet).");
                                 self.learner_setup = self.learner_setup_temp.clone();
                                 self.learner_type = self.learner_type_temp.clone();
                             }
@@ -237,7 +236,7 @@ impl LearnSettingsWindow {
     
                     let response = ui.text_edit_singleline(buffer);
     
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    if response.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         if let Ok(parsed) = buffer.parse::<usize>() {
                             *max_iterations = parsed;
                         } else {
