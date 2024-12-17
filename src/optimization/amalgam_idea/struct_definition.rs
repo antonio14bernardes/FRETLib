@@ -37,7 +37,7 @@ Fitness: OptimizationFitness
     pub(super) init_with_manual_distribution: bool, // True if the user initializes the distribution instead of the population
     pub(super) manual_pop_size: Option<usize>, // Give the option for the user to set the population size manually without changing any other parameters
 
-    pub(super) yapper: Option<Yapper>,
+    pub(super) _yapper: Option<Yapper>,
     pub(super) verbosity_level: YapLevel,
 }
 
@@ -77,7 +77,7 @@ Fitness: OptimizationFitness
             init_with_manual_distribution: false,
             manual_pop_size: None,
 
-            yapper: None,
+            _yapper: None,
             verbosity_level: YapLevel::ALot,
         }
     } 

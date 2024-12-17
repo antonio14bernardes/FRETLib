@@ -1,5 +1,6 @@
 use super::analysis::hmm_analyzer::{HMMAnalyzer, HMMAnalyzerError};
 use super::hmm_instance::{HMMInstance, HMMInstanceError};
+use super::initialization::kmeans::{KMEANS_EVAL_METHOD_DEFAULT, KMEANS_MAX_ITERS_DEFAULT, KMEANS_NUM_TRIES_DEFAULT, KMEANS_TOLERANCE_DEFAULT};
 use super::InitializationMethods;
 use super::initialization::eval_clusters::ClusterEvaluationMethod;
 use super::learning::learner_trait::HMMLearnerTrait;
@@ -49,12 +50,30 @@ impl HMM {
     }
 
     pub fn add_learner(&mut self) {
-        self.learner = Some(HMMLearner::new_default());
+        self.learner = Some(HMMLearner::default());
         self.first_component = HMMComponent::Learner;
 
         // Reset components that would run before to None
         self.num_states_finder = None;
         self.initializer = None;   
+    }
+
+    pub fn remove_learner(&mut self) -> Result<(), HMMError>{
+        if self.learner.is_none() {
+            return Err(HMMError::LearnerNotDefined)
+        }
+        
+        self.learner = None;
+        self.initializer = None;
+        self.num_states_finder = None;
+
+        self.first_component = HMMComponent::Analyzer;
+
+        Ok(())
+    }
+
+    pub fn get_learner(&self) -> Option<&HMMLearner> {
+        self.learner.as_ref()
     }
 
     pub fn set_learner_type(&mut self, learner_type: LearnerType) -> Result<(), HMMError> {
@@ -128,6 +147,23 @@ impl HMM {
         Ok(())
     }
 
+    pub fn remove_initializer(&mut self) -> Result<(), HMMError>{
+        if self.initializer.is_none() {
+            return Err(HMMError::InitializerNotDefined)
+        }
+        
+        self.initializer = None;
+        self.num_states_finder = None;
+
+        self.first_component = HMMComponent::Learner;
+
+        Ok(())
+    }
+
+    pub fn get_initializer(&self) -> Option<&HMMInitializer> {
+        self.initializer.as_ref()
+    }
+
     pub fn set_initialization_method(&mut self, initializer_setup: InitializationMethods) -> Result<(), HMMError> {
         if self.initializer.is_none() { return Err(HMMError::InitializerNotDefined) };
 
@@ -150,8 +186,10 @@ impl HMM {
         // If input is compatible:
         if let HMMInput::Initializer { num_states, sequence_set }= input {
             // Run Initializer
-            let init_output = initializer.get_intial_values(&sequence_set, num_states)
-            .map_err(|err| HMMError::InitializerError { err })?;
+            let init_output_res = initializer.get_intial_values(&sequence_set, num_states);
+            let init_output = init_output_res.map_err(|err| HMMError::InitializerError { err })?;
+
+            
 
             Ok((init_output, num_states, sequence_set))
 
@@ -168,6 +206,22 @@ impl HMM {
         self.first_component = HMMComponent::NumStatesFinder;
 
         Ok(())
+    }
+
+    pub fn remove_number_of_states_finder(&mut self) -> Result<(), HMMError>{
+        if self.num_states_finder.is_none() {
+            return Err(HMMError::NumStatesFinderNotDefined)
+        }
+
+        self.num_states_finder = None;
+
+        self.first_component = HMMComponent::Initializer;
+
+        Ok(())
+    }
+
+    pub fn get_num_states_finder(&self) -> Option<&HMMNumStatesFinder> {
+        self.num_states_finder.as_ref()
     }
 
     pub fn set_state_number_finder_strategy(&mut self, strategy_wrapper: NumStatesFindStratWrapper) -> Result<(), HMMError> {
@@ -230,12 +284,14 @@ impl HMM {
 
             current_input = HMMInput::Learner { num_states, sequence_set, learner_init };
 
+            println!("Got input");
+
         }
         if self.learner.is_some() {
             let ((states, start_matrix, transition_matrix), sequence_set) = 
             self.run_learner(current_input)?;
 
-            current_input = HMMInput::Analyzer { sequence_set, states, start_matrix, transition_matrix };
+            current_input = HMMInput::Analyzer { sequence_set, states, start_matrix: Some(start_matrix), transition_matrix: Some(transition_matrix) };
 
         }
 
@@ -255,7 +311,7 @@ pub enum HMMInput {
     NumStatesFinder{sequence_set: Vec<Vec<f64>>},
     Initializer{num_states: usize, sequence_set: Vec<Vec<f64>>},
     Learner{num_states: usize, sequence_set: Vec<Vec<f64>>, learner_init: LearnerSpecificInitialValues},
-    Analyzer{sequence_set: Vec<Vec<f64>>, states: Vec<State>, start_matrix: StartMatrix, transition_matrix: TransitionMatrix},
+    Analyzer{sequence_set: Vec<Vec<f64>>, states: Vec<State>, start_matrix: Option<StartMatrix>, transition_matrix: Option<TransitionMatrix>},
 }
 
 impl HMMInput {
@@ -274,8 +330,12 @@ impl HMMInput {
                 Self::check_sequence_set_validity(sequence_set)?;
                 Self::check_states_validity(states)?;
                 let num_states = states.len();
-                Self::check_start_matrix_validity(start_matrix, num_states)?;
-                Self::check_transition_matrix_validity(transition_matrix, num_states)?;
+                if let Some(start_matrix_value) = start_matrix {
+                    Self::check_start_matrix_validity(start_matrix_value, num_states)?;
+                }
+                if let Some(transition_matrix_value) = transition_matrix {
+                    Self::check_transition_matrix_validity(transition_matrix_value, num_states)?;   
+                }
             }
 
         }
@@ -325,10 +385,22 @@ impl HMMInput {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum NumStatesFindStratWrapper {
     KMeansClustering {num_tries: Option<usize>, max_iters: Option<usize>, tolerance: Option<f64>, method: Option<ClusterEvaluationMethod>},
     BaumWelch,
     CurrentSetup, // remove this stuff here
+}
+
+impl Default for NumStatesFindStratWrapper {
+    fn default() -> Self {
+        NumStatesFindStratWrapper::KMeansClustering {
+            num_tries: Some(KMEANS_NUM_TRIES_DEFAULT),
+            max_iters: Some(KMEANS_MAX_ITERS_DEFAULT),
+            tolerance: Some(KMEANS_TOLERANCE_DEFAULT),
+            method: Some(KMEANS_EVAL_METHOD_DEFAULT),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -445,8 +517,8 @@ mod tests {
         let input = HMMInput::Analyzer { 
             sequence_set: sequence_set.clone(), 
             states: states.clone(), 
-            start_matrix: start_matrix.clone(), 
-            transition_matrix: transition_matrix.clone() 
+            start_matrix: Some(start_matrix.clone()), 
+            transition_matrix: Some(transition_matrix.clone()) 
         };
         let result = hmm.run(input);
 

@@ -146,6 +146,8 @@ pub enum NumStatesFindStrat {
     CurrentSetup{initializer: HMMInitializer, learner: HMMLearner},
 }
 
+
+
 impl NumStatesFindStrat {
     pub fn default() -> Self {
         NumStatesFindStrat::KMeansClustering{
@@ -286,14 +288,11 @@ fn trial_fn_baum_welch(sequence_set: &Vec<Vec<f64>>, num_states: usize) -> (f64,
 
     // Retrieve log_likelihood from the baum welch object
     let log_likelihood = if baum_output.is_ok() {
-        println!("Was good");
         baum_learner.get_log_likelihood().unwrap_or(f64::NEG_INFINITY)
     } else {
-        println!("Error is {:?}", baum_output);
         f64::NEG_INFINITY
     };
 
-    println!("Got fitness");
     
     (log_likelihood, num_parameters, num_samples)
 

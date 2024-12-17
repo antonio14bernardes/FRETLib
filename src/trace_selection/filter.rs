@@ -25,7 +25,7 @@ pub struct MinMaxMeanStd {
 pub enum FilterTest {
     PhotobleachingSteps { test: Comparison<usize>, received: usize },
     DonorLifetime { test: Comparison<usize>, received: usize },
-    FretLifetime { test: Comparison<usize>, largest_received: usize },
+    FretLifetime { test: Comparison<usize>, lifetime: usize },
     SNRBackground { test: Comparison<f64>, received: f64 },
     CorrelationCoefficient { test: Comparison<f64>, received: f64 },
     BackgroundNoise { test: Comparison<f64>, received: f64 },
@@ -39,23 +39,23 @@ pub enum FilterTest {
 
 #[derive(Debug, Clone)]
 pub struct FilterSetup {
-    photobleaching_steps: Option<Comparison<usize>>,
-    donor_lifetime: Option<Comparison<usize>>,
-    fret_lifetimes: Option<Comparison<usize>>,
-    snr_background: Option<Comparison<f64>>,
+    pub photobleaching_steps: Option<Comparison<usize>>,
+    pub donor_lifetime: Option<Comparison<usize>>,
+    pub fret_lifetimes: Option<Comparison<usize>>,
+    pub snr_background: Option<Comparison<f64>>,
     // donor_blinking_events: Option<Comparison<usize>>,
-    correlation_coefficient: Option<Comparison<f64>>,
-    background_noise: Option<Comparison<f64>>,
+    pub correlation_coefficient: Option<Comparison<f64>>,
+    pub background_noise: Option<Comparison<f64>>,
 
-    mean_total_intensity: Option<Comparison<MinMaxMeanStd>>,
-    snr_signal: Option<Comparison<f64>>,
-    fret_first_time_step: Option<Comparison<f64>>,
-    highest_fret: Option<Comparison<f64>>,
-    average_fret: Option<Comparison<f64>>,
+    pub mean_total_intensity: Option<Comparison<usize>>,
+    pub snr_signal: Option<Comparison<f64>>,
+    pub fret_first_time_step: Option<Comparison<f64>>,
+    pub highest_fret: Option<Comparison<f64>>,
+    pub average_fret: Option<Comparison<f64>>,
 }
 
-impl FilterSetup {
-    pub fn default() -> Self {
+impl Default for FilterSetup {
+    fn default() -> Self {
         Self {
             photobleaching_steps: Some(Comparison::Equal { value: 1 }),
             donor_lifetime: Some(Comparison::Larger { value: 50 }),
@@ -63,7 +63,7 @@ impl FilterSetup {
             snr_background: Some(Comparison::Larger { value: 8.0 }),
             correlation_coefficient: Some(Comparison::Smaller { value: 0.5 }),
             background_noise: Some(Comparison::Smaller { value: 70.0 }),
-            mean_total_intensity: Some(Comparison::WithinNStd {n: 2}),
+            mean_total_intensity: Some(Comparison::WithinNStd { n: 2 }),
 
             snr_signal: None,
             fret_first_time_step: None,
@@ -71,7 +71,9 @@ impl FilterSetup {
             average_fret: None,
         }
     }
+}
 
+impl FilterSetup {
     pub fn empty() -> Self {
         Self {
             photobleaching_steps: None,
@@ -114,12 +116,23 @@ impl FilterSetup {
         // FRET lifetime test
         let lifetimes = &values_to_filter.fret_lifetimes;
         if lifetimes.is_empty() && self.fret_lifetimes.is_some() {
-            failed_tests.push(FilterTest::FretLifetime { test: self.fret_lifetimes.as_ref().unwrap().clone(), largest_received: 0 });
+            failed_tests.push(FilterTest::FretLifetime { 
+                test: self.fret_lifetimes.as_ref().unwrap().clone(), 
+                lifetime: 0 
+            });
         } else {
-            let largest_lifetime = lifetimes.iter().map(|lifetime| lifetime[1]).max().unwrap_or(0);
+            // Sum up all lifetime[1] values
+            let total_lifetime: usize = lifetimes
+                .iter()
+                .map(|lifetime| lifetime[1] - lifetime[0])
+                .sum();
+
             if let Some(min_required) = self.fret_lifetimes.as_ref() {
-                if !run_test(Some(min_required), largest_lifetime) {
-                    failed_tests.push(FilterTest::FretLifetime { test: min_required.clone(), largest_received: largest_lifetime });
+                if !run_test(Some(min_required), total_lifetime) {
+                    failed_tests.push(FilterTest::FretLifetime { 
+                        test: min_required.clone(), 
+                        lifetime: total_lifetime 
+                    });
                 }
             }
         }
@@ -217,7 +230,7 @@ impl FilterSetup {
 }
 
 fn run_test<T>(comparison: Option<&Comparison<T>>, value: T) -> bool 
-where T: PartialEq + PartialOrd
+where T: PartialEq + PartialOrd + Default
 {
     if let Some(test) = comparison {
         test.compare(value)
@@ -227,7 +240,8 @@ where T: PartialEq + PartialOrd
 }
 
 #[derive(Debug, Clone)]
-pub enum Comparison<T> 
+pub enum Comparison<T>
+where T: Default
 {
     Larger {value: T},
     LargerEq {value: T},
@@ -238,7 +252,7 @@ pub enum Comparison<T>
 }
 
 impl<T> Comparison<T> 
-where T: PartialOrd + PartialEq
+where T: PartialOrd + PartialEq + Default
 {
     pub fn compare(&self, other_value: T) -> bool {
         match self {
@@ -252,7 +266,8 @@ where T: PartialOrd + PartialEq
     }
 }
 
-impl<T> Comparison<T> {
+impl<T> Comparison<T> 
+where T: Default{
     pub fn compare_min_max_mean_std(&self, other: &MinMaxMeanStd) -> bool {
         match self {
             Self::WithinNStd { n } => {

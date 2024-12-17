@@ -98,7 +98,9 @@ impl PointTraces {
                     Err(PointTracesError::TraceTypeAlreadyPresent{trace_type: trace_type.clone()})
                 }
             }
-            Err(e) => Err(PointTracesError::IndividualTraceError { error: e, trace_type }),
+            Err(e) => {
+                Err(PointTracesError::IndividualTraceError { error: e, trace_type })
+            },
         }
     }
 
@@ -169,15 +171,11 @@ impl PointTraces {
         let values = fret.get_values();
 
         // Extract photobleaching idx
-        let donor_pb_option = self.donor_photobleaching.as_ref();
-        let acceptor_pb_option = self.acceptor_photobleaching.as_ref();
+        let donor_pb_option = self.donor_photobleaching.clone();
+        let acceptor_pb_option = self.acceptor_photobleaching.clone();
 
-        if donor_pb_option.is_none() || acceptor_pb_option.is_none() {
-            return Err(PointTracesError::FilteringNotPerformed)
-        }
-
-        let donor_pb_vec = donor_pb_option.unwrap();
-        let acceptor_db_vec = acceptor_pb_option.unwrap();
+        let donor_pb_vec: Vec<usize> = donor_pb_option.unwrap_or(Vec::new());
+        let acceptor_db_vec: Vec<usize> = acceptor_pb_option.unwrap_or(Vec::new());
 
         let donor_pb = if donor_pb_vec.len() > 0 {donor_pb_vec[donor_pb_vec.len() - 1]} else {values.len()-1};
         let acceptor_pb = if acceptor_db_vec.len() > 0 {acceptor_db_vec[acceptor_db_vec.len() - 1]} else {values.len()-1};
@@ -320,7 +318,11 @@ impl PointTraces {
         }
 
         if let Ok(new_trace) = IndividualTrace::new(sum_vec, TraceType::TotalPairIntensity) {
-            self.insert_trace(new_trace)?;
+            let _ = self.remove_trace(&TraceType::TotalPairIntensity); // Will return error if no trace to delete but it's fine
+            let err = self.insert_trace(new_trace); // Is error if already computed but since we delete it before there should be no error
+            if err.is_err() {println!("Got error here");}
+            
+            err?;
         } 
 
         Ok(())
@@ -362,30 +364,55 @@ impl PointTraces {
 
         Ok(())
     }
-    
+
+
+
     pub fn compute_pair_correlation(&mut self) -> Result<(), PointTracesError> {
+        // Ensure donor-acceptor pair exists
         let [donor, acceptor] = self.don_acc_pair.as_ref()
-        .ok_or(PointTracesError::NoDonorAcceptorPairFound)?;
-        
+            .ok_or(PointTracesError::NoDonorAcceptorPairFound)?;
+    
+        // Retrieve donor and acceptor trace values
         let d_values = self.get_trace(donor).unwrap().get_values();
         let a_values = self.get_trace(acceptor).unwrap().get_values();
-
-        let [d_mean, d_std] = compute_mean_and_std(d_values);
-        let [a_mean, a_std] = compute_mean_and_std(a_values);
-
-        let mut numerator = 0.0;
+    
+        // Determine the earliest photobleaching index
+        let donor_pb_idx = self.donor_photobleaching
+            .as_ref()
+            .and_then(|v| v.last().copied())
+            .unwrap_or(d_values.len());
+    
+        let acceptor_pb_idx = self.acceptor_photobleaching
+            .as_ref()
+            .and_then(|v| v.last().copied())
+            .unwrap_or(a_values.len());
+    
+        let earliest_pb = donor_pb_idx.min(acceptor_pb_idx);
+    
+        // Truncate the values up to the earliest photobleaching index
+        let d_values_truncated = &d_values[..earliest_pb];
+        let a_values_truncated = &a_values[..earliest_pb];
+    
+        // Compute mean and standard deviation for truncated values
+        let [d_mean, d_std] = compute_mean_and_std(d_values_truncated);
+        let [a_mean, a_std] = compute_mean_and_std(a_values_truncated);
+    
+        // Check for zero standard deviation to prevent division by zero
         let denominator = d_std * a_std;
-
-        if denominator == 0.0 {return Err(PointTracesError::StdZero)}
-
-        for (d, a) in d_values.iter().zip(a_values) {
+        if denominator == 0.0 {
+            return Err(PointTracesError::StdZero);
+        }
+    
+        // Compute numerator for correlation coefficient
+        let mut numerator = 0.0;
+        for (d, a) in d_values_truncated.iter().zip(a_values_truncated) {
             numerator += (d - d_mean) * (a - a_mean);
         }
-
-        numerator /= (d_values.len() - 1) as f64;
-
-        self.correlation_coef = Some(numerator/denominator);
-
+        numerator /= (d_values_truncated.len() - 1) as f64;
+    
+        // Update correlation coefficient in struct
+        self.correlation_coef = Some(numerator / denominator);
+    
         Ok(())
     }
 
@@ -452,6 +479,7 @@ impl PointTraces {
         photobleaching_filter_values: &PhotobleachingFilterValues,
         fret_lifetimes_filter_values: &FretLifetimesFilterValues,
     ) -> Result<ValuesToFilter, PointTracesError>{
+
         self.update_donor_acceptor();
 
         // if let Err(e) = self.detect_photobleaching(photobleaching_filter_values) {
