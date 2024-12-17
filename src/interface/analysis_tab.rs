@@ -143,6 +143,7 @@ impl AnalysisTab {
             // Show the lines in a single plot
             Plot::new("states_gaussians")
                 .legend(Legend::default())
+                .height(300.0)
                 .allow_drag(false)
                 .allow_scroll(false)
                 .show(ui, |plot_ui| {
