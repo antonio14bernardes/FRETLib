@@ -1,8 +1,7 @@
-use super::constraints::{self, *};
+use super::constraints::*;
 use super::multivariate_gaussian::CovMatrixType;
 use super::variable_subsets::*;
 use rand::Rng;
-use rand_distr::uniform::SampleUniform;
 use std::collections::HashSet;
 use std::ops::{Add, Sub, Div, Mul};
 use nalgebra::{DMatrix, DVector};

@@ -4,7 +4,7 @@ use rand::thread_rng;
 
 use crate::optimization::optimizer::{FitnessFunction, OptimizationFitness};
 
-use super::verbosity::{YapLevel, Yapper};
+use super::verbosity::Yapper;
 use super::{AmalgamIdea, AmalgamIdeaError};
 
 use super::super::optimizer::Optimizer;

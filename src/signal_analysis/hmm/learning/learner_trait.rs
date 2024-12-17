@@ -4,7 +4,7 @@ use std::fmt;
 
 use crate::{optimization::amalgam_idea::AmalgamIdeaError, signal_analysis::hmm::{amalgam_integration::amalgam_modes::{AmalgamDependencies, AmalgamFitness, AMALGAM_DEPENDENCY_DEFAULT, AMALGAM_FITNESS_DEFAULT, AMALGAM_ITER_MEMORY_DEFAULT, AMALGAM_MAX_ITERS_DEFAULT}, baum_welch::BaumWelchError, optimization_tracker::TerminationCriterium, StartMatrix, State, TransitionMatrix}};
 
-pub trait HMMLearnerTrait: Debug{
+pub trait HMMLearnerTrait: Debug + Send{
     fn setup_learner(&mut self, specific_setup: LearnerSpecificSetup) -> Result<(), HMMLearnerError>;
     fn initialize_learner(
         &mut self,
@@ -15,6 +15,8 @@ pub trait HMMLearnerTrait: Debug{
     fn learn(&mut self) -> Result<(Vec<State>, StartMatrix, TransitionMatrix), HMMLearnerError>;
 
     fn get_setup_data(&self) -> Option<&LearnerSpecificSetup>;
+
+    fn get_learner_type(&self) -> &LearnerType;
 
     fn get_log_likelihood(&self) -> Option<f64>;
 
@@ -33,7 +35,7 @@ impl Clone for Box<dyn HMMLearnerTrait> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LearnerType {
     AmalgamIdea,
     BaumWelch,
@@ -143,7 +145,7 @@ impl LearnerSpecificSetup {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LearnerSpecificInitialValues {
     AmalgamIdea {initial_distributions: Option<(Vec<DVector<f64>>, Vec<DMatrix<f64>>)>},
     BaumWelch {states: Vec<State>, start_matrix: Option<StartMatrix>, transition_matrix: Option<TransitionMatrix>}

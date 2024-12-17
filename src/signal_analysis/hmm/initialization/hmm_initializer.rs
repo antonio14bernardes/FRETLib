@@ -9,10 +9,10 @@ use super::init_method_structs::*;
 
 use super::{eval_clusters::*, kmeans::*};
 
-pub(super) const STATE_NOISE_MULT: f64 = 0.5;
-pub(super) const STATE_NOISE_STD_MULT: f64 = 0.25;
-pub(super) const START_PROB_STD: f64 = 0.25;
-pub(super) const TRANSITION_PROB_STD: f64 = 0.25;
+pub(crate) const STATE_NOISE_MULT: f64 = 0.5;
+pub(crate) const STATE_NOISE_STD_MULT: f64 = 0.25;
+pub(crate) const START_PROB_STD: f64 = 0.25;
+pub(crate) const TRANSITION_PROB_STD: f64 = 0.25;
 
 
 pub struct InitializationMethods {
@@ -44,14 +44,15 @@ pub struct HMMInitializer {
     verbose: bool,
 }
 
+
+
 impl HMMInitializer {
     pub fn new(learner_setup: &LearnerSpecificSetup) -> Self {
         HMMInitializer{
-            state_values_method: StateValueInitMethod::KMeansClustering 
-            { max_iters: None, tolerance: None, num_tries: None, eval_method: None },
-            state_noises_method: StateNoiseInitMethod::Sparse{mult: None},
-            start_matrix_method: StartMatrixInitMethod::Balanced,
-            transition_matrix_method: TransitionMatrixInitMethod::Balanced,
+            state_values_method: StateValueInitMethod::default(),
+            state_noises_method: StateNoiseInitMethod::default(),
+            start_matrix_method: StartMatrixInitMethod::default(),
+            transition_matrix_method: TransitionMatrixInitMethod::default(),
             learner_setup: learner_setup.clone(),
             verbose: true,
         }
@@ -120,7 +121,6 @@ impl HMMInitializer {
         // Get state values.
         let (state_values, state_noise_from_values) = self.state_values_method.get_state_values(num_states, sequence_set, model_dist)?;
         
-        
         // If the state values also provides noise, use this instead of the one obtained form the StateNoiseInitMethod struct
         let state_noise: Vec<f64>;
         let mut state_noise_std: Option<Vec<f64>> = None;
@@ -164,6 +164,7 @@ impl HMMInitializer {
         let initial_values =
         build_learner_setup_enum(&self.learner_setup, state_values, state_noise, state_noise_std, 
             start_matrix, start_matrix_cov_diag, transition_matrix, transition_matrix_cov_diags);
+
 
         if self.verbose {self.finish_initialization_yap();} // Print some more stuff
 
@@ -211,6 +212,18 @@ impl HMMInitializer {
             }
             StateValueInitMethod::Sparse => {
                 println!("  State Values Initialization Method: Sparse");
+            }
+            StateValueInitMethod::StateHints { state_values } => {
+                let formatted_values: String = state_values
+                    .iter()
+                    .map(|value| value.to_string()) // Convert each value to a string
+                    .collect::<Vec<_>>() // Collect into a vector
+                    .join(", "); // Join values with a comma and a space
+
+                println!(
+                    "State Values Initialization Method: State Hints. With hinted state values: {}",
+                    formatted_values
+                );
             }
         }
 
@@ -450,6 +463,7 @@ pub enum HMMInitializerError {
     StateError{err: StateError},
     EmptyInitializationCluster,
     InvalidInput,
+    IncompatibleInputs,
 }
 
 #[cfg(test)]

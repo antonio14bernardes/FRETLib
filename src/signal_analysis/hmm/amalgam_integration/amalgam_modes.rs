@@ -12,14 +12,14 @@ pub const AMALGAM_FITNESS_DEFAULT: AmalgamFitness = AmalgamFitness::Direct;
 pub const AMALGAM_DEPENDENCY_DEFAULT: AmalgamDependencies = AmalgamDependencies::AllIndependent;
 pub const AMALGAM_MAX_ITERS_DEFAULT: usize = 1000;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AmalgamDependencies {
     AllIndependent, // Recommended
     StateCompact,
     ValuesDependent,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AmalgamFitness {
     Direct, // Recommended
     BaumWelch

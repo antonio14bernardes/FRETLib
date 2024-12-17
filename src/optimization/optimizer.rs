@@ -1,5 +1,3 @@
-use super::variable_subsets::VariableSubsetError;
-
 pub trait Optimizer<T, Fitness> 
 where
     Fitness: OptimizationFitness,

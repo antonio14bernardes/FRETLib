@@ -7,7 +7,7 @@ use super::kmeans::k_means_1_d;
 
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ClusterEvaluationMethod {
     Silhouette,
     SimplifiedSilhouette,

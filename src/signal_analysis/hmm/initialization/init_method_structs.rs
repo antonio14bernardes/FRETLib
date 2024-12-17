@@ -2,16 +2,17 @@ use crate::signal_analysis::hmm::{hmm_instance::HMMInstance, StartMatrix, Transi
 
 use super::{eval_clusters::{silhouette_score_1_d, simplified_silhouette_score_1_d, ClusterEvaluationMethod}, hmm_initializer::{check_validity, HMMInitializerError, START_PROB_STD, STATE_NOISE_MULT, STATE_NOISE_STD_MULT, TRANSITION_PROB_STD}, kmeans::*};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StateValueInitMethod {
     KMeansClustering{max_iters: Option<usize>, tolerance: Option<f64>, num_tries: Option<usize>, eval_method: Option<ClusterEvaluationMethod>},
     Random,
     Sparse,
+    StateHints{state_values: Vec<f64>},
     // Add others when they are implemented
 }
 
-impl StateValueInitMethod {
-    pub fn default() -> Self {
+impl Default for StateValueInitMethod {
+    fn default() -> Self {
         StateValueInitMethod::KMeansClustering { 
             max_iters: Some(KMEANS_MAX_ITERS_DEFAULT),
             tolerance: Some(KMEANS_TOLERANCE_DEFAULT),
@@ -19,6 +20,9 @@ impl StateValueInitMethod {
             eval_method: Some(KMEANS_EVAL_METHOD_DEFAULT) 
         }
     }
+}
+
+impl StateValueInitMethod {
 
     pub fn handle_nones(self) -> Self {
         match self {
@@ -34,8 +38,9 @@ impl StateValueInitMethod {
                     num_tries: Some(num_tries_new),
                     eval_method: Some(eval_method_new) }
             }
-            Self::Random => {self}
-            Self::Sparse => {self}
+            Self::Random => self,
+            Self::Sparse => self,
+            Self::StateHints { .. } => self,
         }
     }
     pub fn get_state_values(&self, num_states: usize, sequence_set: &Vec<Vec<f64>>, dist: bool) -> Result<(Vec<f64>, Option<Vec<f64>>), HMMInitializerError>{
@@ -133,20 +138,41 @@ impl StateValueInitMethod {
 
                 return Ok((state_values, None));
             }
+
+            StateValueInitMethod::StateHints { state_values } => {
+                if state_values.len() > num_states {return Err(HMMInitializerError::IncompatibleInputs)}
+                
+                let mut all_state_values = state_values.clone();
+                let num_values_left = num_states - all_state_values.len();
+
+                // Get full states but we only care about values here
+                let random_states = HMMInstance::generate_random_states(num_values_left as u16, Some(*max_value), Some(*min_value), None, None)
+                .map_err(|err| HMMInitializerError::StateError { err })?;
+
+                let random_state_values: Vec<f64> = random_states.iter().map(|state| state.get_value()).collect();
+
+                all_state_values.extend(random_state_values);
+
+
+                Ok((all_state_values, None))
+            }
         }
 
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StateNoiseInitMethod {
     Sparse{mult: Option<f64>},
 }
 
-impl StateNoiseInitMethod {
-    pub fn default() -> Self {
+impl Default for StateNoiseInitMethod {
+    fn default() -> Self {
         Self::Sparse { mult: Some(STATE_NOISE_MULT) }
     }
+}
+
+impl StateNoiseInitMethod {
 
     pub fn handle_nones(self) -> Self {
         match self {
@@ -185,17 +211,20 @@ impl StateNoiseInitMethod {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StartMatrixInitMethod {
     Balanced,
     Random,
     // Add others when they are implemented
 }
 
-impl StartMatrixInitMethod {
-    pub fn default() -> Self  {
+impl Default for StartMatrixInitMethod {
+    fn default() -> Self  {
         StartMatrixInitMethod::Balanced{}
     }
+}
+
+impl StartMatrixInitMethod {
     pub fn get_start_matrix(&self, num_states: usize, dist: bool) -> Result<(StartMatrix, Option<Vec<f64>>), HMMInitializerError> {
         if num_states == 0 {return Err(HMMInitializerError::InvalidNumberOfStates)}
         let start_matrix: StartMatrix;
@@ -220,17 +249,20 @@ impl StartMatrixInitMethod {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TransitionMatrixInitMethod {
     Balanced,
     Random,
     // Add others when they are implemented
 }
 
-impl TransitionMatrixInitMethod {
-    pub fn default() -> Self {
+impl Default for TransitionMatrixInitMethod {
+    fn default() -> Self {
         TransitionMatrixInitMethod::Balanced
     }
+}
+
+impl TransitionMatrixInitMethod {
     pub fn get_transition_matrix(&self, num_states: usize, dist: bool) -> Result<(TransitionMatrix,Option<Vec<Vec<f64>>>), HMMInitializerError> {
         if num_states == 0 {return Err(HMMInitializerError::InvalidNumberOfStates)}
         let transition_matrix: TransitionMatrix;

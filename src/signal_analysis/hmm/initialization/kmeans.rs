@@ -9,6 +9,7 @@ pub const KMEANS_NUM_TRIES_DEFAULT: usize = 5;
 pub const KMEANS_EVAL_METHOD_DEFAULT: ClusterEvaluationMethod = ClusterEvaluationMethod::Silhouette;
 
 pub fn k_means_1_d(data: &[f64], k: usize, max_iterations: usize, tolerance: f64) -> (Vec<f64>, Vec<usize>) {
+    println!("Starting a KMeans Clustering run");
     // Step 1: Initialize random cluster centers
     let mut rng = thread_rng();
     let mut centers: Vec<f64> = data.choose_multiple(&mut rng, k).cloned().collect();
@@ -60,10 +61,12 @@ pub fn k_means_1_d(data: &[f64], k: usize, max_iterations: usize, tolerance: f64
         centers = new_centers;
 
         iter += 1;
+
         if max_shift < tolerance || changes == 0 || iter >= max_iterations {
             break;
         }
     }
+
 
     (centers, assignments)
 }

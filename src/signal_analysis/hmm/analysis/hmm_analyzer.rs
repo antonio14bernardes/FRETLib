@@ -82,14 +82,19 @@ impl HMMAnalyzer {
         &mut self,
         sequence_set: &Vec<Vec<f64>>,
         states: Vec<State>,
-        start_matrix: StartMatrix,
-        transition_matrix: TransitionMatrix,
+        start_matrix: Option<StartMatrix>,
+        transition_matrix: Option<TransitionMatrix>,
     )  -> Result<(), HMMAnalyzerError> 
     {
+        let num_states = states.len();
+        
         self.set_sequence_set(sequence_set)?;
         self.set_states(states)?;
-        self.set_start_matrix(start_matrix)?;
-        self.set_transition_matrix(transition_matrix)?;
+
+        let start_matrix_value = start_matrix.unwrap_or(StartMatrix::new_balanced(num_states));
+        self.set_start_matrix(start_matrix_value)?;
+        let transition_matrix_value = transition_matrix.unwrap_or(TransitionMatrix::new_balanced(num_states));
+        self.set_transition_matrix(transition_matrix_value)?;
 
         Ok(())
     }

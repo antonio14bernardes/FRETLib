@@ -2,9 +2,9 @@ use std::io::{self, Write};
 use terminal_size::{terminal_size, Width};
 
 
-use crate::{optimization::optimizer::OptimizationFitness, signal_analysis::hmm::AmalgamFitness};
+use crate::optimization::optimizer::OptimizationFitness;
 
-use super::{AmalgamIdeaParameters};
+use super::AmalgamIdeaParameters;
 
 #[derive(Clone, Debug)]
 pub enum YapLevel {
