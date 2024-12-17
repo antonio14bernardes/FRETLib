@@ -186,11 +186,17 @@ impl AnalysisTab {
                 .allow_drag(false)
                 .allow_zoom(false)
                 .allow_scroll(false)
-                // Use x_axis_formatter to convert x-values (0,1,2,...) to "State 0", "State 1", etc.
+                .show_grid(true)
+                //Use x_axis_formatter to convert x-values (0,1,2,...) to "State 0", "State 1", etc.
                 .x_axis_formatter(|mark, _range| {
                     let x = mark.value; // Get the f64 value from the GridMark
-                    let idx = x.round() as usize;
-                    format!("State {}", idx)
+                    //let idx = x.round() as usize;
+                    if x % 1.0 == 0.0 {
+                        format!("State {}", x)
+                    } else {
+                        String::new()
+                    }
+                    
                 })
                 .show(ui, |plot_ui| {
                     plot_ui.bar_chart(chart);
