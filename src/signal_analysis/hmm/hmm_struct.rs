@@ -249,6 +249,16 @@ impl HMM {
         Ok(())
     }
 
+    pub fn set_nsf_min_max_trial_states(&mut self, min_k: Option<usize>, max_k: Option<usize>)  -> Result<(), HMMError> {
+        if self.num_states_finder.is_none() {return Err(HMMError::NumStatesFinderNotDefined)}
+
+        let num_states_finder = self.num_states_finder.as_mut().unwrap();
+        num_states_finder.set_min_max_trial_states(max_k, min_k)
+        .map_err(|err| HMMError::NumStatesFinderError { err })?;
+
+        Ok(())
+    }
+
     fn run_num_states_finder(&mut self, input: HMMInput) -> Result<(usize, Vec<Vec<f64>>), HMMError> {
         // Check if learner has been added
         if self.num_states_finder.is_none() {return Err(HMMError::NumStatesFinderNotDefined)}

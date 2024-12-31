@@ -440,9 +440,12 @@ impl MainTab {
         if self.num_states_find_enabled {
             // Retrieve relevant stuff
             let strategy = self.nsf_seettings_window.strategy.clone();
+            let min_k = self.nsf_seettings_window.min_k;
+            let max_k = self.nsf_seettings_window.max_k;
 
             hmm.add_number_of_states_finder().unwrap();
             hmm.set_state_number_finder_strategy(strategy).unwrap();
+            hmm.set_nsf_min_max_trial_states(Some(min_k), Some(max_k)).unwrap();
         }
     }
 }
